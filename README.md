@@ -6,7 +6,7 @@ The project started as a small Python script to reduce repetitive work and event
 
 What began as a proof-of-concept became a platform that can process thousands of records reliably while maintaining data quality checks and operational visibility.
 
-Manual processing of roughly **1,440 records typically required nearly two months of manual effort**.
+Manual processing of roughly **1,440 records typically required nearly two months of effort**.
 DocuMate reduces that to **a few minutes of automated processing**, with safeguards that prevent bad data from entering the document generation stage.
 
 ---
@@ -19,7 +19,7 @@ DocuMate reduces that to **a few minutes of automated processing**, with safegua
 
 ## The Problem
 
-The original workflow involved officers manually copying data from Excel into Word templates to generate certificates.
+The original workflow involved staff manually copying data from Excel into Word templates to generate documents.
 
 Each record required:
 
@@ -46,10 +46,10 @@ The workflow was effectively Excel acting as both a database and a processing sy
 
 DocuMate gradually evolved into a system that automates the entire pipeline:
 
-1. Reads applicant records from **Excel or PostgreSQL**
+1. Reads records from **Excel or PostgreSQL**
 2. Runs a **multi-stage data validation process**
 3. Maps validated data into **Word document templates**
-4. Generates certificates automatically
+4. Generates documents automatically
 5. Merges all documents into a **single print-ready file**
 6. Updates processing status in Excel or the database
 7. Exposes the same data to **Power BI dashboards for reporting**
@@ -124,7 +124,7 @@ DocuMate performs five checks:
 
 If any validation step fails, processing stops immediately and the issue is reported.
 
-This prevents bad data from generating incorrect certificates.
+This prevents bad data from generating incorrect documents.
 
 ---
 
@@ -250,8 +250,8 @@ These design choices prioritise reliability and predictable processing over raw 
 |---------|---------|------|--------|
 | v1 | 1,440 | ~32 seconds | Individual files |
 | v2 | 1,440 | ~31 seconds | Individual files |
-| v3 | 1,440 | ~211 seconds | Single merged document |
-| v4/X | 1,440 | ~213 seconds | Single merged document |
+| v3 | 1,440 | ~3.5 minutes | Single merged document |
+| v4/X | 1,440 | ~3.5 minutes | Single merged document |
 
 Later versions take longer because all documents are merged into a single output file, which grows progressively larger as records are added.
 
@@ -261,14 +261,14 @@ Even with this overhead, the automated workflow is dramatically faster than manu
 
 ## Ethical Design Note
 
-During development, I explored automating the signing authority's signature on the certificates.
+During development, I explored automating the signing authority's signature on the documents.
 
 This idea was deliberately dropped for two reasons:
 
 1. A reproduced signature would not look authentic when printed.
-2. Automating an officer's identity mark on official documents crosses an ethical boundary without explicit authorisation.
+2. Automating an identity mark on official documents crosses an ethical boundary without explicit authorisation.
 
-The system therefore only generates the certificate content and leaves signing as a manual step.
+The system therefore only generates the document content and leaves signing as a manual step.
 
 ---
 
