@@ -1,4 +1,4 @@
-# DocuMate
+# DocuMate — Document Automation and Analytics Pipeline
 
 DocuMate is a document automation and data validation system I built to replace a slow, manual workflow that relied heavily on Excel copy-paste operations.
 
