@@ -1,76 +1,76 @@
 """
 ====================================================================
- DocuMateX — Batched Word Mail Merge Edition
+ DocuMateY — Word Mail Merge Edition
 ====================================================================
 
- DocuMateY proved the concept: Python orchestrating Word's
- native Mail Merge engine instead of rendering documents itself.
+ This is where DocuMate stopped building its own engine and
+ started orchestrating Microsoft's.
 
- But Y had a problem. When processing large volumes (1000+
- records), Word's single Execute() call would hang. It was
- trying to build a massive document entirely in memory,
- and the COM interface became unresponsive.
+ v1 through v3 used docxtpl to render documents in Python.
+ It worked, but it was essentially rebuilding what Word's
+ Mail Merge already does natively, and has done for decades.
 
- X solves this by introducing batched execution.
+ The question that led to Y:
+   "Why keep rebuilding a document renderer when Microsoft
+    already built one that millions of people trust?"
 
 --------------------------------------------------------------------
- WHAT CHANGED FROM Y TO X
+ THE SHIFT: FROM RENDERING TO ORCHESTRATION
 --------------------------------------------------------------------
 
- Y: Single Execute() for the entire record range.
-    Fast for small batches. Hangs on large volumes.
+ DocuMate's real value was never the rendering. It was the
+ intelligence around it: validation, filtering, range detection,
+ status updates, and error handling. The rendering was just
+ the final step.
 
- X: Splits the range into batches of 250 records.
-    Each batch produces a temp .docx file.
-    After all batches complete, they are combined
-    into one final document.
-
- Everything else remains identical:
+ Y keeps everything that made DocuMate reliable:
    - load_data()           → same
    - filter_records()      → same (5-step validation gauntlet)
    - format_dates()        → same
    - update_excel_status() → same
    - run()                 → same flow, same prompts
 
---------------------------------------------------------------------
- HOW BATCHING WORKS
---------------------------------------------------------------------
-
- 1. Python calculates the full record range (e.g. 1 to 1440).
-
- 2. The range is split into batches of 250:
-    Batch 1: records 1-250
-    Batch 2: records 251-500
-    Batch 3: records 501-750
-    ...and so on.
-
- 3. For each batch, Word's Mail Merge executes with that
-    specific From/To range. The result is saved as a
-    temporary .docx file.
-
- 4. Once all batches are done, the temp files are combined
-    into one final document using Word's InsertFile with
-    section breaks between batches.
-
- 5. Temp files are cleaned up automatically.
+ And replaces ONLY the document generation engine:
+   - docxtpl rendering     → Word's native Mail Merge
+   - Python fills templates → Word fills templates
+   - ProcessPoolExecutor   → win32com COM automation
 
 --------------------------------------------------------------------
- PERFORMANCE
+ HOW IT WORKS
 --------------------------------------------------------------------
 
- 1,440 records:
-   - Manual process:     ~126 hours
-   - DocuMate v3 (docxtpl): ~3.5 minutes
-   - DocuMateY (single MM):  hangs on this volume
-   - DocuMateX (batched MM): ~52 seconds
+ 1. Python filters IN PROCESS records and calculates the
+    record range (first and last row positions in Excel).
 
- The batching approach turned a hanging system into the
- fastest version of DocuMate yet.
+ 2. Python opens Word via COM automation (win32com),
+    connects the Excel data source programmatically,
+    and sets the From/To range automatically.
+
+ 3. Word's Mail Merge engine renders all documents in
+    one Execute() call, producing a single merged output.
+
+ 4. Python saves the result and cleans up.
+
+ The user no longer needs to manually open Word, select
+ the data source, type in the range, and click merge.
+ Python handles the entire orchestration.
+
+--------------------------------------------------------------------
+ WHAT THIS MEANS
+--------------------------------------------------------------------
+
+ DocuMate went from being a document generator to being
+ a document orchestrator. The brain stayed the same.
+ The hands got upgraded to Microsoft's own engine.
 
 --------------------------------------------------------------------
  KNOWN LIMITATIONS
 --------------------------------------------------------------------
 
+ - Single Execute() for the entire range. Works well for
+   small to medium batches but can cause Word to hang
+   on very large volumes (1000+ records). DocuMateX
+   solves this with batched execution.
  - Filtered IN PROCESS records must be continuous in the
    Excel sheet. Scattered rows would include unwanted
    records in between.
@@ -78,9 +78,6 @@
    if the template has a saved data source link.
  - Requires Microsoft Word desktop installed.
  - Windows only (win32com).
- - Temp files are written to output_files/ during processing
-   and cleaned up after. If the process crashes mid-batch,
-   leftover temp files may remain.
 
 --------------------------------------------------------------------
  REQUIREMENTS
@@ -242,28 +239,24 @@ class BirthRegistrationProcessor:
             if col in self.data.columns:
                 self.data[col] = pd.to_datetime(self.data[col], errors="coerce").dt.strftime("%d/%m/%Y")
 
-    def generate_and_merge_documents(self, merged_filename=f"DocuMateCX_BIRTH_REGISTRATION_{datetime.now().strftime('%d%m%Y')}.docx") -> None:
+    def generate_and_merge_documents(self, merged_filename=f"DocuMatePLUS_BIRTH_REGISTRATION_{datetime.now().strftime('%d%m%Y')}.docx") -> None:
         """
         Step 4: Generate and merge all documents using Microsoft Word Mail Merge
         directly against the original Excel datasource.
 
-        Changes from GPT's original:
-        - DispatchEx instead of Dispatch (forces fresh Word instance)
-        - AutomationSecurity = 3 (suppresses data source confirmation dialogs)
-        - Batched execution (250 records per batch) to prevent Word hanging on large volumes
-        - Debug prints before/after each critical step to identify hang points
-        - Temp batch files cleaned up after final merge
+        Only this engine is changed.
+        Rest of DocuMate flow remains the same.
         """
 
         if self.data is None or self.data.empty:
             print("DocuMate : ⚠️ No records found for merging.")
             return
 
-        # Reload full source to map filtered rows back to Word mail merge record positions
+        # Reload full source only to map filtered rows back to original Word mail merge record positions
         full_df = pd.read_excel(self.excel_path, sheet_name=self.sheet_name)
         full_df["__merge_record__"] = full_df.index + 1
 
-        # Sort by Serial
+        # Same sorting idea as original generation flow
         if "Serial" in self.data.columns:
             try:
                 self.data["__serial_num__"] = (
@@ -271,9 +264,8 @@ class BirthRegistrationProcessor:
                 )
                 self.data = self.data.sort_values("__serial_num__")
             except Exception:
-                print("⚠️ Serial sort skipped.")
+                print("⚠️ Some Serial values could not be converted, sorting skipped.")
 
-        # Map File_Number to original Excel row position
         merge_map = dict(
             zip(full_df["File_Number"].astype(str).str.strip(), full_df["__merge_record__"])
         )
@@ -299,10 +291,11 @@ class BirthRegistrationProcessor:
             )
 
         total_records = len(self.data)
-        print(f"DocuMate : ⏳ Processing {total_records} records with Word Mail Merge...")
-        print(f"DocuMate : 📌 Auto-selected range in Word: From {self.data.iloc[0]['__serial_num__']} To {self.data.iloc[-1]['__serial_num__']}")
+        print(f"DocuMate : ⏳ Generating and merging {total_records} documents...\n")
+        print("DocuMate : 🔗 Connecting data source,Please approve the action in Word file if prompted and wait for the document generation to complete...")
+        
         if not os.path.exists(self.output_folder):
-            print(f"DocuMate : 📂 Creating output folder '{self.output_folder}'...")
+            print(f"\nDocuMate : 📂 Output folder '{self.output_folder}' does not exist. Creating it...")
             os.makedirs(self.output_folder)
 
         excel_abs = os.path.abspath(self.excel_path)
@@ -311,25 +304,17 @@ class BirthRegistrationProcessor:
 
         if not os.path.exists(excel_abs):
             raise FileNotFoundError(f"Excel source not found: {excel_abs}")
+
         if not os.path.exists(template_abs):
             raise FileNotFoundError(f"Template not found: {template_abs}")
 
-        # Batch setup - Word chokes on 1000+ records in a single Execute
-        batch_size = 250
-        batches = []
-        for i in range(first_record, last_record + 1, batch_size):
-            batch_end = min(i + batch_size - 1, last_record)
-            batches.append((i, batch_end))
-
         word = None
         main_doc = None
-        final_doc = None
-        temp_files = []
+        merged_doc = None
 
         try:
             pythoncom.CoInitialize()
 
-            print("DocuMate : 🔧 Starting Word Mail Merge...")
             word = win32com.client.DispatchEx("Word.Application")
             word.Visible = True
             word.DisplayAlerts = 0
@@ -341,8 +326,7 @@ class BirthRegistrationProcessor:
             time.sleep(0.5)
 
             sheet = self.sheet_name.replace("'", "''")
-
-            print("DocuMate : 🔗 Connecting data source,Please approve the action in Word file if prompted and wait for the document generation to complete...")
+            
             main_doc.MailMerge.OpenDataSource(
                 Name=excel_abs,
                 ConfirmConversions=False,
@@ -355,10 +339,8 @@ class BirthRegistrationProcessor:
                     f"Data Source={excel_abs};"
                     'Extended Properties="Excel 12.0 Xml;HDR=YES;IMEX=1";'
                 ),
-                SQLStatement=f"SELECT * FROM [{sheet}$]",
-                SubType=0
+                SQLStatement=f"SELECT * FROM [{sheet}$]"
             )
-            print("DocuMate : ✅ Data source connected successfully, Please wait while I generate the documents...")
 
             time.sleep(0.5)
 
@@ -366,73 +348,37 @@ class BirthRegistrationProcessor:
             main_doc.MailMerge.Destination = WD_SEND_TO_NEW_DOCUMENT
             main_doc.MailMerge.SuppressBlankLines = True
 
-            merge_start = time.time()
+            main_doc.MailMerge.DataSource.FirstRecord = int(first_record)
+            main_doc.MailMerge.DataSource.LastRecord = int(last_record)
 
-            # Process each batch
-            for batch_num, (batch_start, batch_end) in enumerate(batches, start=1):
-                main_doc.MailMerge.DataSource.FirstRecord = int(batch_start)
-                main_doc.MailMerge.DataSource.LastRecord = int(batch_end)
-                main_doc.MailMerge.Execute(Pause=False)
+            print(f"DocuMate : 📌 Auto-selected range in Word: From {first_record} To {last_record}")
 
-                time.sleep(0.5)
+            main_doc.MailMerge.Execute(Pause=False)
 
-                merged_doc = word.ActiveDocument
+            time.sleep(0.5)
 
-                temp_path = os.path.abspath(
-                    os.path.join(self.output_folder, f"__temp_batch_{batch_num}.docx")
-                )
-                merged_doc.SaveAs2(temp_path, FileFormat=WD_FORMAT_DOCUMENT_DEFAULT)
-                temp_files.append(temp_path)
+            merged_doc = word.ActiveDocument
+            merged_doc.SaveAs2(output_path, FileFormat=WD_FORMAT_DOCUMENT_DEFAULT)
 
-                try:
-                    merged_doc.Close(False)
-                except Exception:
-                    pass
-                merged_doc = None
-
-
-            # Close the template before combining
-            try:
-                main_doc.Close(False)
-            except Exception:
-                pass
-            main_doc = None
-
-            # Combine all batch files into one final document
-            if len(temp_files) == 1:
-                # Only one batch, just rename it
-                import shutil
-                shutil.move(temp_files[0], output_path)
-                temp_files = []
-            else:
-
-                final_doc = word.Documents.Open(os.path.abspath(temp_files[0]))
-
-                for i, temp_file in enumerate(temp_files[1:], start=2):
-                    rng = final_doc.Range(final_doc.Content.End - 1, final_doc.Content.End - 1)
-                    rng.InsertBreak(7)  # wdSectionBreakNextPage
-                    rng = final_doc.Range(final_doc.Content.End - 1, final_doc.Content.End - 1)
-                    rng.InsertFile(os.path.abspath(temp_file))
-
-                final_doc.SaveAs2(output_path, FileFormat=WD_FORMAT_DOCUMENT_DEFAULT)
-
-            print(f"\nDocuMate : ✅ Generated {total_records} documents saved in:\n📂 {output_path}")
+            print(
+                f"\nDocuMate : ✅ Generated and merged {total_records} documents "
+                f"(in Serial order) and saved in:\n📂 {output_path}"
+            )
 
         except Exception as e:
             print(f"\n⚠️ DocuMate : Mail Merge error — {e}")
             raise
 
         finally:
-            # Close everything safely
             try:
-                if final_doc is not None:
-                    final_doc.Close(False)
+                if merged_doc is not None:
+                    merged_doc.Close(SaveChanges=WD_DO_NOT_SAVE_CHANGES)
             except Exception:
                 pass
 
             try:
                 if main_doc is not None:
-                    main_doc.Close(False)
+                    main_doc.Close(SaveChanges=WD_DO_NOT_SAVE_CHANGES)
             except Exception:
                 pass
 
@@ -447,19 +393,12 @@ class BirthRegistrationProcessor:
             except Exception:
                 pass
 
-            # Clean temp files
-            for f in temp_files:
-                try:
-                    if os.path.exists(f):
-                        os.remove(f)
-                except Exception:
-                    pass
-
-            # Clean helper columns
+            # Clean helper cols
             if self.data is not None:
-                for col in ["__serial_num__", "__merge_record__"]:
-                    if col in self.data.columns:
-                        self.data.drop(columns=[col], inplace=True, errors="ignore")
+                if "__serial_num__" in self.data.columns:
+                    self.data.drop(columns=["__serial_num__"], inplace=True, errors="ignore")
+                if "__merge_record__" in self.data.columns:
+                    self.data.drop(columns=["__merge_record__"], inplace=True, errors="ignore")
 
     def update_excel_status(self) -> None:
         """
@@ -527,7 +466,7 @@ class BirthRegistrationProcessor:
             self.generate_and_merge_documents()
             merge_time = time.time() - merge_start
             print(f"\nDocuMate :✅ Generated and merged {len(self.data)} documents")
-            print(f"DocuMate :⚡ Word Mail Merge completed in {merge_time:.2f} seconds.")
+            print(f"DocuMate : ⚡ Word Mail Merge completed in {merge_time:.2f} seconds.")
 
             user_choice = input(
                 f"DocuMate : Do you want me to mark the statuses as PRINTED for {len(self.data)} records? (yes/no): "
