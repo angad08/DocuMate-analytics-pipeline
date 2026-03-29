@@ -30,7 +30,7 @@
 
  4. GENERATES WORD DOCUMENTS
     Template:  "DOCUMENT_TEMPLATE_FILE.docx"
-    Output:    FILES/
+    Output:    output_files/
     Naming:    Serial "123/2025" → "123.docx"
     One document per record.
 
@@ -61,10 +61,10 @@ import time
 
 start_time = time.time()
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Load Excel file and specify sheet name
-df = pd.read_excel(os.path.join(base_dir, "DocuMate_Records", "DocuMate_DataFrame.xlsx"), sheet_name="DocuMateSRC")
+df = pd.read_excel(os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"), sheet_name="DocuMateSRC")
 
 # ✅ Filter only rows where Status = "IN PROCESS"
 df = df[df["STATUS"].str.upper() == "IN PROCESS"]
@@ -76,7 +76,7 @@ for col in date_cols:
         df[col] = pd.to_datetime(df[col], errors="coerce").dt.strftime("%d/%m/%Y")
 
 for idx, row in df.iterrows():
-    doc = DocxTemplate(os.path.join(base_dir, "DocuMate_Templates", "DOCUMENT_TEMPLATE_FILE.docx"))
+    doc = DocxTemplate(os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE.docx"))
 
     # Create context from Excel row
     context = row.to_dict()
@@ -86,7 +86,7 @@ for idx, row in df.iterrows():
     # Use only the number before "/" from Serial as filename
     serial = str(row.get("Serial", f"row{idx+1}")).split("/")[0]
 
-    output_filename = os.path.join(base_dir, "FILES", f"{serial}.docx")
+    output_filename = os.path.join(base_dir, "output_files", f"{serial}.docx")
     doc.save(output_filename)
     print(f"✅ Created: {serial}.docx")
 
