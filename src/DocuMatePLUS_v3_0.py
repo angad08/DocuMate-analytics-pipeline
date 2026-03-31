@@ -52,7 +52,7 @@
  CORE FUNCTIONALITY (INHERITED FROM v1/v2)
 --------------------------------------------------------------------
 
- 1. Reads data from DocuMate_Records/DocuMate_DataFrame.xlsx → DocuMateSRC
+ 1. Reads data from data/DocuMate_DataFrame.xlsx → DocuMateSRC
  2. Filters rows where STATUS == "IN PROCESS"
  3. Formats date fields to dd/mm/yyyy
  4. Generates Word documents using a template
@@ -396,7 +396,7 @@ class BirthRegistrationProcessor:
                         self.add_page_break(master_doc)
                         composer.append(temp_doc)
 
-                    print(f"DocuMate :✔️ Processed record {i}/{total_records}", end="\r")
+                    print(f"DocuMate :✔️  Processed record {i}/{total_records}", end="\r")
 
                 except Exception as e:
                     print(f"\n⚠️ Error in record {i}: {e}")
@@ -502,7 +502,7 @@ class BirthRegistrationProcessor:
             total_start: float = time.time()
 
             # --- Generate & Merge ---
-            print("DocuMate : ⚙️ Processing Word documents...")
+            print("DocuMate : ⚙️  Processing Word documents...")
             merge_start: float = time.time()
             self.generate_and_merge_documents()
             merge_time: float = time.time() - merge_start
@@ -563,9 +563,9 @@ class BirthRegistrationProcessor:
 # Expected folder structure:
 #
 #   base_dir/
-#   ├── DocuMate_Records/DocuMate_DataFrame.xlsx     ← input data
-#   ├── DocuMate_Templates/DOCUMENT_TEMPLATE_FILE.docx  ← Word template
-#   └── FILES/                                       ← merged output goes here
+#   ├── data/DocuMate_DataFrame.xlsx     ← input data
+#   ├── templates/DOCUMENT_TEMPLATE_FILE.docx  ← Word template
+#   └── output_files/                                       ← merged output goes here
 #
 # ====================================================================
 
@@ -576,14 +576,14 @@ if __name__ == "__main__":
     base_dir: str = (
         os.path.dirname(os.path.dirname(sys.executable))
         if getattr(sys, "frozen", False)
-        else os.path.dirname(__file__)
+        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
 
     docuMatePLUSAgent: BirthRegistrationProcessor = BirthRegistrationProcessor(
-        excel_path=os.path.join(base_dir, "DocuMate_Records", "DocuMate_DataFrame.xlsx"),
+        excel_path=os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"),
         sheet_name="DocuMateSRC",
-        template_path=os.path.join(base_dir, "DocuMate_Templates", "DOCUMENT_TEMPLATE_FILE.docx"),
-        output_folder=os.path.join(base_dir,"FILES"),
+        template_path=os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE.docx"),
+        output_folder=os.path.join(base_dir,"output_files"),
         update_existing=False,
     )
 

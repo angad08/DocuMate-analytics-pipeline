@@ -40,11 +40,11 @@
  CORE FUNCTIONALITY (UNCHANGED FROM v1)
 --------------------------------------------------------------------
 
- 1. Reads data from DocuMate_Records/DocuMate_DataFrame.xlsx → DocuMateSRC
+ 1. Reads data from data/DocuMate_DataFrame.xlsx → DocuMateSRC
  2. Filters rows where STATUS == "IN PROCESS"
  3. Formats date fields to dd/mm/yyyy
  4. Generates one Word document per record using a template
-    → saved to FILES/ as {serial}.docx
+    → saved to output_files/ as {serial}.docx
  5. Displays summary (records processed + execution time)
 
 --------------------------------------------------------------------
@@ -248,21 +248,21 @@ if __name__ == "__main__":
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(os.path.dirname(sys.executable))
     else:
-        base_dir = os.path.dirname(__file__)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Create the processor with all paths configured relative to base_dir.
     # This means the folder structure should look like:
     #
     #   base_dir/
-    #   ├── DocuMate_Records/DocuMate_DataFrame.xlsx  ← input data
-    #   ├── DocuMate_Templates/DOCUMENT_TEMPLATE_FILE.docx  ← Word template
-    #   └── FILES/                               ← output goes here
+    #   ├── data/DocuMate_DataFrame.xlsx  ← input data
+    #   ├── templates/DOCUMENT_TEMPLATE_FILE.docx  ← Word template
+    #   └── output_files/                               ← output goes here
     #
     docuMateAgent = BirthRegistrationProcessor(
-        excel_path=os.path.join(base_dir, "DocuMate_Records", "DocuMate_DataFrame.xlsx"),
+        excel_path=os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"),
         sheet_name="DocuMateSRC",
-        template_path=os.path.join(base_dir, "DocuMate_Templates", "DOCUMENT_TEMPLATE_FILE.docx"),
-        output_folder=os.path.join(base_dir,"FILES"),
+        template_path=os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE.docx"),
+        output_folder=os.path.join(base_dir,"output_files"),
         update_existing=True
     )
 

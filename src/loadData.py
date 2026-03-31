@@ -12,7 +12,7 @@ import datetime as dt
 
 
 
-EXCEL_PATH = os.path.join(os.path.dirname(__file__), "Test_Insert_data.xlsx")
+EXCEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "test_data", "Test_Insert_data.xlsx")
 SHEET_NAME = "Sheet1"
 
 DB_CONFIG = {
