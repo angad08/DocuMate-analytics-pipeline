@@ -729,10 +729,10 @@ if __name__ == "__main__":
     )
 
     db_config = {
-        "host": "aws-1-ap-southeast-2.pooler.supabase.com",
-        "database": "postgres",
-        "user": "postgres.echjbuprlnxkbxflylzf",
-        "password": "docuMateX9968",             # <- put your DB password
+        "host": "YOUR_DB_HOST",
+        "database": "YOUR_DB_NAME",
+        "user": "YOUR_DB_USER",
+        "password": "YOUR_DB_PASSWORD",
         "port": 5432,
         "sslmode": "require"
     }
