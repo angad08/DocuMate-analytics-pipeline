@@ -577,9 +577,9 @@ if __name__ == "__main__":
     )
 
     docuMatePLUSAgent = BirthRegistrationProcessor(
-        excel_path=os.path.join(base_dir, "data", "BIRTH_REGISTRATION_2025.xlsx"),
+        excel_path=os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"),
         sheet_name="DocuMateSRC",
-        template_path=os.path.join(base_dir, "templates", "BIRTH_REG_FORMAT_MM.docx"),
+        template_path=os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE_MM.docx"),
         output_folder=os.path.join(base_dir, "output_files"),
         update_existing=False,
     )
