@@ -171,8 +171,9 @@ class BirthRegistrationProcessor:
             self.data = None
             return
 
-        # --- Check 3: Filter to "IN PROCESS" only ---
-        self.data = self.data[self.data["STATUS"].str.upper() == "IN PROCESS"]
+        # --- Check 3: Filter to rows not yet "PRINTED" (IN PROCESS, blank, etc.) ---
+        status_norm = self.data["STATUS"].fillna("").astype(str).str.strip().str.upper()
+        self.data = self.data[status_norm != "PRINTED"]
 
         if self.data.empty:
             msg = (
@@ -425,7 +426,8 @@ class BirthRegistrationProcessor:
             date_col = headers["Date_Printed"]
             in_process_rows = [
                 r for r in range(2, ws.max_row + 1)
-                if str(ws.cell(row=r, column=status_col).value).strip().upper() == "IN PROCESS"
+                if ("" if ws.cell(row=r, column=status_col).value is None
+                    else str(ws.cell(row=r, column=status_col).value)).strip().upper() != "PRINTED"
             ]
 
             for r in in_process_rows:
