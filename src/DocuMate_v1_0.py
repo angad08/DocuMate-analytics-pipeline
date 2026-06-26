@@ -66,8 +66,9 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Load Excel file and specify sheet name
 df = pd.read_excel(os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"), sheet_name="DocuMateSRC")
 
-# ✅ Filter only rows where Status = "IN PROCESS"
-df = df[df["STATUS"].str.upper() == "IN PROCESS"]
+# ✅ Filter rows that are not yet "PRINTED" (covers IN PROCESS, blank, etc.)
+_status_norm = df["STATUS"].fillna("").astype(str).str.strip().str.upper()
+df = df[_status_norm != "PRINTED"]
 
 # Convert any datetime columns to string format dd/mm/yyyy
 date_cols = ["Registration_date"]  # add more if needed

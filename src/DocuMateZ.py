@@ -259,7 +259,7 @@ class BirthRegistrationProcessor:
                     ON a.mha_file_number = b.mha_file_number
                 LEFT JOIN ib_authority ib
                     ON a.ib_staff_authority_id = ib.ib_staff_authority_id
-            WHERE UPPER(a.status) = 'IN PROCESS'
+            WHERE UPPER(COALESCE(a.status, '')) <> 'PRINTED'
             ORDER BY a.serial;
         """)
 
@@ -436,15 +436,16 @@ class BirthRegistrationProcessor:
             for i in range(0, len(serials), batch_size):
                 batch = serials[i:i + batch_size]
 
-                # WHERE clause double-checks status is still "IN PROCESS"
-                # to prevent re-marking records already updated
+                # WHERE clause double-checks the status is still un-printed
+                # (IN PROCESS, blank, or anything not yet PRINTED) to avoid
+                # re-marking records already updated
                 self.cur.execute(
                     """
                     UPDATE applicant
                     SET status = 'PRINTED',
                         date_issued = %s
                     WHERE serial = ANY(%s)
-                    AND coalesce(upper(status),'') = 'IN PROCESS';
+                    AND coalesce(upper(status),'') <> 'PRINTED';
                     """,
                     (today, batch)
                 )

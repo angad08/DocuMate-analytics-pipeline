@@ -109,11 +109,13 @@ class BirthRegistrationProcessor:
         """
         Step 2: Keep only the records that need processing.
         Filters the data to rows where the STATUS column says
-        "IN PROCESS" (case-insensitive).
+        "IN PROCESS" (case-insensitive), is blank, or is anything
+        that is not yet "PRINTED".
         Everything else is ignored.
         """
         if self.data is not None:
-            self.data = self.data[self.data["STATUS"].str.upper() == "IN PROCESS"]
+            status_norm = self.data["STATUS"].fillna("").astype(str).str.strip().str.upper()
+            self.data = self.data[status_norm != "PRINTED"]
 
 
     def format_dates(self, date_columns):

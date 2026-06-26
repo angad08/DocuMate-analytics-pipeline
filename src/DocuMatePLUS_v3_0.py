@@ -235,8 +235,9 @@ class BirthRegistrationProcessor:
             self.data = None
             return
 
-        # --- Check 3: Filter to "IN PROCESS" only ---
-        self.data = self.data[self.data["STATUS"].str.upper() == "IN PROCESS"]
+        # --- Check 3: Filter to rows not yet "PRINTED" (IN PROCESS, blank, etc.) ---
+        status_norm = self.data["STATUS"].fillna("").astype(str).str.strip().str.upper()
+        self.data = self.data[status_norm != "PRINTED"]
 
         if self.data.empty:
             msg: str = (
@@ -450,13 +451,14 @@ class BirthRegistrationProcessor:
 
             today: str = datetime.now().strftime("%d/%m/%Y")
 
-            # Find all "IN PROCESS" rows first, then update in bulk
-            # (avoids scanning the sheet multiple times)
+            # Find all rows not yet "PRINTED" (IN PROCESS, blank, etc.) first,
+            # then update in bulk (avoids scanning the sheet multiple times)
             STATUS_col: int = headers["STATUS"]
             date_col: int = headers["Date_Printed"]
             in_process_rows: List[int] = [
                 r for r in range(2, ws.max_row + 1)
-                if str(ws.cell(row=r, column=STATUS_col).value).strip().upper() == "IN PROCESS"
+                if ("" if ws.cell(row=r, column=STATUS_col).value is None
+                    else str(ws.cell(row=r, column=STATUS_col).value)).strip().upper() != "PRINTED"
             ]
 
             for r in in_process_rows:
