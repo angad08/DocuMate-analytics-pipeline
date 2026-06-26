@@ -103,7 +103,7 @@ v1 -> v2 -> v3 -> (Y -> X) + (Z) -> O
 
 ### v1.0 -- Proof of concept
 
-The first version was a flat script. It read an Excel file, filtered rows marked "IN PROCESS", and generated one Word document per record using `docxtpl`. No error handling, no validation, no structure. Its only job was to prove the idea worked: that Python could turn Excel rows into Word documents faster than a human copying and pasting.
+The first version was a flat script. It read an Excel file, selected every row not yet marked "PRINTED" (any record whose status is `IN PROCESS`, blank, or anything other than `PRINTED`), and generated one Word document per record using `docxtpl`. No error handling, no validation, no structure. Its only job was to prove the idea worked: that Python could turn Excel rows into Word documents faster than a human copying and pasting.
 
 It worked. That was enough to justify building further.
 
@@ -113,7 +113,7 @@ v1 was fragile. If anything went wrong, it crashed silently. v2 wrapped the same
 
 ### v3.0 / PLUS -- Data reliability
 
-v2 worked, but it trusted its input. If someone left a field blank or entered a duplicate file number, the system would generate a bad certificate without warning. v3 added a five-stage validation pipeline that checks the data before any document is generated: dataset existence, status column verification, active record filtering, mandatory field validation, and duplicate detection. If any check fails, processing stops immediately.
+v2 worked, but it trusted its input. If someone left a field blank or entered a duplicate file number, the system would generate a bad certificate without warning. v3 added a five-stage validation pipeline that checks the data before any document is generated: dataset existence, status column verification, active record filtering, mandatory field validation, and duplicate detection. The active record filter selects every row not yet marked "PRINTED" (`IN PROCESS`, blank, or any other non-`PRINTED` status), so records with a missing or non-standard status are no longer silently skipped. If any check fails, processing stops immediately.
 
 v3 also introduced merged document output (all certificates combined into one print-ready file using `docxcompose`) and parallel processing using `ProcessPoolExecutor` to render documents simultaneously across multiple CPU cores.
 
@@ -127,9 +127,13 @@ Y answered that question. Using `win32com` and COM automation, Python opens the 
 
 This was the first crossover: Python driving a desktop application programmatically to automate a process that previously required manual clicks through Word's UI.
 
+Like the other Excel versions, Y selects every row not yet marked "PRINTED" (`IN PROCESS`, blank, or any other non-`PRINTED` status) when building the record range it hands to Word, and the same condition guards the write-back step that marks rows as `PRINTED` afterward.
+
 ### X -- Batched execution
 
 Y worked well on small volumes but hung on large ones. When Word tried to process 1,000+ records in a single `Execute()` call, the COM interface became unresponsive. X solved this by splitting the record range into batches of 250. Each batch produces a temporary `.docx` file, and after all batches complete, the files are combined into one final document using Word's `InsertFile` method. Temp files are cleaned up automatically.
+
+X keeps the same Excel record selection as the other Excel versions -- every row not yet marked "PRINTED" (`IN PROCESS`, blank, or any other non-`PRINTED` status) -- and because the batching requires those filtered rows to be contiguous in the sheet, broadening the filter also means blank-status rows between active records are now picked up rather than breaking the continuous range.
 
 This turned a hanging system into the fastest version of DocuMate at the time.
 
@@ -214,7 +218,7 @@ DocuMate performs five checks:
 
 1. **Dataset existence check** -- Confirms that data is available before processing begins.
 2. **Status column verification** -- Ensures required fields exist in the dataset.
-3. **Active record filtering** -- Filters only records marked "IN PROCESS".
+3. **Active record filtering** -- Selects only records that still need processing. The Excel versions (v1, v2, v3/PLUS, X, Y) treat any row not yet marked `PRINTED` as active -- this covers `IN PROCESS`, blank, and any other non-`PRINTED` status -- so records with a missing or non-standard status are no longer silently skipped. The PostgreSQL versions (Z, O, and `loadData`) keep the stricter, exact `IN PROCESS` match against the database.
 4. **Mandatory field validation** -- Identifies rows with missing values and reports the exact fields.
 5. **Duplicate detection** -- Prevents duplicate file numbers from entering the system.
 
