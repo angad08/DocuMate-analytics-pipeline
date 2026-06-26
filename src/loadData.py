@@ -175,7 +175,7 @@ def select_data(cur):
                 ON a.mha_file_number = b.mha_file_number
             LEFT JOIN ib_authority ib
                 ON a.ib_staff_authority_id = ib.ib_staff_authority_id
-        WHERE UPPER(COALESCE(a.status, '')) <> 'PRINTED'
+        WHERE UPPER(a.status) = 'IN PROCESS'
         ORDER BY a.serial;
     """)
 
