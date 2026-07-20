@@ -502,20 +502,17 @@ class BirthRegistrationProcessor:
             except Exception:
                 pass
 
-            # Clean temp batch files
-            for f in temp_files:
-                try:
-                    if os.path.exists(f):
-                        os.remove(f)
-                except Exception:
-                    pass
-
-            # Clean temp Excel data source
-            try:
-                if os.path.exists(temp_excel_path):
-                    os.remove(temp_excel_path)
-            except Exception:
-                pass
+            # Clean temp files (retry — Word releases file locks a moment after Quit)
+            for f in temp_files + [temp_excel_path]:
+                for _attempt in range(10):
+                    try:
+                        if os.path.exists(f):
+                            os.remove(f)
+                        break
+                    except OSError:
+                        time.sleep(1)
+                else:
+                    print(f"⚠️ DocuMate : Could not delete temp file: {f}")
 
 
     def update_sql_status(self):

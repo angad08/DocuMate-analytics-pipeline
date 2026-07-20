@@ -448,13 +448,17 @@ class BirthRegistrationProcessor:
             except Exception:
                 pass
 
-            # Clean temp files
+            # Clean temp files (retry — Word releases file locks a moment after Quit)
             for f in temp_files:
-                try:
-                    if os.path.exists(f):
-                        os.remove(f)
-                except Exception:
-                    pass
+                for _attempt in range(10):
+                    try:
+                        if os.path.exists(f):
+                            os.remove(f)
+                        break
+                    except OSError:
+                        time.sleep(1)
+                else:
+                    print(f"⚠️ DocuMate : Could not delete temp file: {f}")
 
             # Clean helper columns
             if self.data is not None:
