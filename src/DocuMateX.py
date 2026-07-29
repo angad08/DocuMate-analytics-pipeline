@@ -36,9 +36,15 @@
  HOW BATCHING WORKS
 --------------------------------------------------------------------
 
- 1. Python calculates the full record range (e.g. 1 to 1440).
+ 1. Python works out which Excel rows to merge, then groups
+    them into contiguous runs. Rows to process are usually
+    one block (e.g. 1 to 1440), but a sheet with a mix of
+    blank and IN PROCESS statuses can be scattered — e.g.
+    runs 1-10 and 100-200. Each run is merged separately so
+    the gaps (already-PRINTED rows) are never pulled in, and
+    the runs recombine into one sequentially ordered file.
 
- 2. The range is split into batches of 250:
+ 2. Each run is split into batches of 250:
     Batch 1: records 1-250
     Batch 2: records 251-500
     Batch 3: records 501-750
@@ -71,9 +77,6 @@
  KNOWN LIMITATIONS
 --------------------------------------------------------------------
 
- - Filtered IN PROCESS records must be continuous in the
-   Excel sheet. Scattered rows would include unwanted
-   records in between.
  - Word's "Select Table" dialog may appear on template open
    if the template has a saved data source link.
  - Requires Microsoft Word desktop installed.
@@ -288,20 +291,29 @@ class BirthRegistrationProcessor:
 
         merge_records = sorted(self.data["__merge_record__"].astype(int).tolist())
 
-        first_record = min(merge_records)
-        last_record = max(merge_records)
-
-        # Direct From/To is safe only when records are continuous
-        expected = list(range(first_record, last_record + 1))
-        if merge_records != expected:
-            raise ValueError(
-                "Filtered IN PROCESS records are not continuous in the Excel source. "
-                "Direct Word Mail Merge range would include unwanted rows in between."
-            )
+        # Word Mail Merge only accepts a From/To range, so scattered records can't
+        # go out in one Execute — the gaps would drag in already-PRINTED rows.
+        # Split the selection into contiguous runs and merge each run on its own;
+        # the batch/combine machinery below stitches the pieces back together.
+        # merge_records is already sorted, so the runs (and the final document)
+        # come out in ascending record order no matter how scattered the source is.
+        runs = []
+        run_start = run_prev = merge_records[0]
+        for record in merge_records[1:]:
+            if record == run_prev + 1:
+                run_prev = record
+            else:
+                runs.append((run_start, run_prev))
+                run_start = run_prev = record
+        runs.append((run_start, run_prev))
 
         total_records = len(self.data)
         print(f"DocuMate : ⏳ Processing {total_records} records with Word Mail Merge...")
-        print(f"DocuMate : 📌 Auto-selected range in Word: From {self.data.iloc[0]['__serial_num__']} To {self.data.iloc[-1]['__serial_num__']}")
+        if len(runs) == 1:
+            print(f"DocuMate : 📌 Auto-selected range in Word: From {runs[0][0]} To {runs[0][1]}")
+        else:
+            spans = ", ".join(f"{s}-{e}" if s != e else str(s) for s, e in runs)
+            print(f"DocuMate : 📌 Records are scattered — merging {len(runs)} separate ranges: {spans}")
         if not os.path.exists(self.output_folder):
             print(f"DocuMate : 📂 Creating output folder '{self.output_folder}'...")
             os.makedirs(self.output_folder)
@@ -315,12 +327,15 @@ class BirthRegistrationProcessor:
         if not os.path.exists(template_abs):
             raise FileNotFoundError(f"Template not found: {template_abs}")
 
-        # Batch setup - Word chokes on 1000+ records in a single Execute
+        # Batch setup - Word chokes on 1000+ records in a single Execute.
+        # Each contiguous run is chunked independently so no batch ever straddles
+        # a gap (which would pull in PRINTED rows). Runs are walked in ascending
+        # order, so the batch list — and the combined document — stays sequential.
         batch_size = 250
         batches = []
-        for i in range(first_record, last_record + 1, batch_size):
-            batch_end = min(i + batch_size - 1, last_record)
-            batches.append((i, batch_end))
+        for run_start, run_end in runs:
+            for i in range(run_start, run_end + 1, batch_size):
+                batches.append((i, min(i + batch_size - 1, run_end)))
 
         word = None
         main_doc = None
@@ -575,18 +590,72 @@ class BirthRegistrationProcessor:
             ctypes.windll.user32.MessageBoxW(0, msg, "DocuMate", 0)
 
 
-if __name__ == "__main__":
-    base_dir = (
-        os.path.dirname(os.path.dirname(sys.executable))
-        if getattr(sys, "frozen", False)
-        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Folder layouts DocuMateX has shipped with, most specific first.
+# (records folder, workbook, templates folder, template, output folder)
+KNOWN_LAYOUTS = [
+    ("DocuMate_Records", "BIRTH_REGISTRATION_2026.xlsx",
+     "DocuMate_Templates", "BIRTH_REG_FORMAT_MM.docx", "FILES"),
+    ("data", "DocuMate_DataFrame.xlsx",
+     "templates", "DOCUMENT_TEMPLATE_FILE_MM.docx", "output_files"),
+]
+
+
+def resolve_layout(max_levels_up: int = 3):
+    """
+    Locate the data and template files wherever DocuMateX happens to sit.
+
+    The script runs from three different depths depending on deployment:
+
+        repo checkout   <root>/src/DocuMateX.py    -> data two levels up
+        production      <root>/DocuMateX.py        -> data one level up
+        frozen .exe     <root>/dist/DocuMateX.exe  -> data two levels up
+
+    A fixed number of dirname() hops only works for one of those, which is
+    why the repo and the deployed copy drifted apart. Instead, walk upward
+    from wherever this file actually lives and stop at the first ancestor
+    that really holds the files. Nothing is assumed — a candidate only wins
+    if both the workbook and the template exist on disk.
+
+    Falls back to the historical repo layout (two levels up, data/ +
+    templates/) when nothing matches, so a fresh checkout with no data yet
+    behaves exactly as it did before and still surfaces the usual
+    FileNotFoundError from generate_and_merge_documents.
+
+    Returns (excel_path, template_path, output_folder).
+    """
+    anchor = os.path.dirname(os.path.abspath(
+        sys.executable if getattr(sys, "frozen", False) else __file__
+    ))
+
+    candidate = anchor
+    for _ in range(max_levels_up + 1):
+        for records, workbook, templates, template, output in KNOWN_LAYOUTS:
+            excel = os.path.join(candidate, records, workbook)
+            tpl = os.path.join(candidate, templates, template)
+            if os.path.isfile(excel) and os.path.isfile(tpl):
+                return excel, tpl, os.path.join(candidate, output)
+        parent = os.path.dirname(candidate)
+        if parent == candidate:          # reached the drive root
+            break
+        candidate = parent
+
+    records, workbook, templates, template, output = KNOWN_LAYOUTS[-1]
+    fallback = os.path.dirname(anchor)
+    return (
+        os.path.join(fallback, records, workbook),
+        os.path.join(fallback, templates, template),
+        os.path.join(fallback, output),
     )
 
+
+if __name__ == "__main__":
+    excel_path, template_path, output_folder = resolve_layout()
+
     docuMatePLUSAgent = BirthRegistrationProcessor(
-        excel_path=os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"),
+        excel_path=excel_path,
         sheet_name="DocuMateSRC",
-        template_path=os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE_MM.docx"),
-        output_folder=os.path.join(base_dir, "output_files"),
+        template_path=template_path,
+        output_folder=output_folder,
         update_existing=False,
     )
 
