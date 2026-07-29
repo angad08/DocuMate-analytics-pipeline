@@ -600,72 +600,13 @@ if __name__ == "__main__":
         os.path.dirname(os.path.dirname(sys.executable))
         if getattr(sys, "frozen", False)
         else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Folder layouts DocuMateX has shipped with, most specific first.
-# (records folder, workbook, templates folder, template, output folder)
-KNOWN_LAYOUTS = [
-    ("DocuMate_Records", "BIRTH_REGISTRATION_2026.xlsx",
-     "DocuMate_Templates", "BIRTH_REG_FORMAT_MM.docx", "FILES"),
-    ("data", "DocuMate_DataFrame.xlsx",
-     "templates", "DOCUMENT_TEMPLATE_FILE_MM.docx", "output_files"),
-]
-
-
-def resolve_layout(max_levels_up: int = 3):
-    """
-    Locate the data and template files wherever DocuMateX happens to sit.
-
-    The script runs from three different depths depending on deployment:
-
-        repo checkout   <root>/src/DocuMateX.py    -> data two levels up
-        production      <root>/DocuMateX.py        -> data one level up
-        frozen .exe     <root>/dist/DocuMateX.exe  -> data two levels up
-
-    A fixed number of dirname() hops only works for one of those, which is
-    why the repo and the deployed copy drifted apart. Instead, walk upward
-    from wherever this file actually lives and stop at the first ancestor
-    that really holds the files. Nothing is assumed — a candidate only wins
-    if both the workbook and the template exist on disk.
-
-    Falls back to the historical repo layout (two levels up, data/ +
-    templates/) when nothing matches, so a fresh checkout with no data yet
-    behaves exactly as it did before and still surfaces the usual
-    FileNotFoundError from generate_and_merge_documents.
-
-    Returns (excel_path, template_path, output_folder).
-    """
-    anchor = os.path.dirname(os.path.abspath(
-        sys.executable if getattr(sys, "frozen", False) else __file__
-    ))
-
-    candidate = anchor
-    for _ in range(max_levels_up + 1):
-        for records, workbook, templates, template, output in KNOWN_LAYOUTS:
-            excel = os.path.join(candidate, records, workbook)
-            tpl = os.path.join(candidate, templates, template)
-            if os.path.isfile(excel) and os.path.isfile(tpl):
-                return excel, tpl, os.path.join(candidate, output)
-        parent = os.path.dirname(candidate)
-        if parent == candidate:          # reached the drive root
-            break
-        candidate = parent
-
-    records, workbook, templates, template, output = KNOWN_LAYOUTS[-1]
-    fallback = os.path.dirname(anchor)
-    return (
-        os.path.join(fallback, records, workbook),
-        os.path.join(fallback, templates, template),
-        os.path.join(fallback, output),
     )
 
-
-if __name__ == "__main__":
-    excel_path, template_path, output_folder = resolve_layout()
-
     docuMatePLUSAgent = BirthRegistrationProcessor(
-        excel_path=excel_path,
+        excel_path=os.path.join(base_dir, "data", "DocuMate_DataFrame.xlsx"),
         sheet_name="DocuMateSRC",
-        template_path=template_path,
-        output_folder=output_folder,
+        template_path=os.path.join(base_dir, "templates", "DOCUMENT_TEMPLATE_FILE_MM.docx"),
+        output_folder=os.path.join(base_dir, "output_files"),
         update_existing=False,
     )
 
