@@ -590,6 +590,16 @@ class BirthRegistrationProcessor:
             ctypes.windll.user32.MessageBoxW(0, msg, "DocuMate", 0)
 
 
+if __name__ == "__main__":
+    # Resolve base directory.
+    # Frozen: the exe lives in dist\, so go up one to reach the project root.
+    # Script: this file sits in src\, so go up one from there. Deployed copies
+    # that sit directly in the project root need one hop fewer — keep this in
+    # step with wherever the file actually lives.
+    base_dir = (
+        os.path.dirname(os.path.dirname(sys.executable))
+        if getattr(sys, "frozen", False)
+        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Folder layouts DocuMateX has shipped with, most specific first.
 # (records folder, workbook, templates folder, template, output folder)
 KNOWN_LAYOUTS = [
