@@ -36,15 +36,15 @@
  HOW BATCHING WORKS
 --------------------------------------------------------------------
 
- 1. Python works out which Excel rows to merge, then groups
-    them into contiguous runs. Rows to process are usually
-    one block (e.g. 1 to 1440), but a sheet with a mix of
-    blank and IN PROCESS statuses can be scattered — e.g.
-    runs 1-10 and 100-200. Each run is merged separately so
-    the gaps (already-PRINTED rows) are never pulled in, and
-    the runs recombine into one sequentially ordered file.
+ 1. Python filters the rows to process and writes just those
+    to a temporary .csv. Because that file holds only the
+    wanted rows, records are numbered 1..N with no gaps,
+    however scattered they were in the original sheet.
 
- 2. Each run is split into batches of 250:
+    The .csv is not a convenience — it is what stops Word
+    showing its "Select Table" dialog. See DATA SOURCE below.
+
+ 2. The range is split into batches of 250:
     Batch 1: records 1-250
     Batch 2: records 251-500
     Batch 3: records 501-750
@@ -74,11 +74,38 @@
  fastest version of DocuMate yet.
 
 --------------------------------------------------------------------
+ DATA SOURCE: WHY A .CSV AND NOT THE WORKBOOK
+--------------------------------------------------------------------
+
+ Merging straight from the .xlsx made Word show its "Select
+ Table" dialog on every run, asking which worksheet to use.
+
+ The cause is the ACE OLEDB *Excel* provider. Passing a
+ Connection string makes Word treat the workbook as a database,
+ and in a database each sheet is a table — so Word asks which
+ table before it will run the SQLStatement. The SQLStatement was
+ correct, it just arrived too late to matter.
+
+ Ruled out by direct experiment:
+   - The template's saved data source link. Opening the template
+     alone raises no dialog and Word reports it as not a merge
+     document at all.
+   - Setting MainDocumentType before OpenDataSource.
+   - Sheet ambiguity. With a temp workbook containing exactly ONE
+     sheet, Word still opened the picker and listed that sheet.
+   - SubType 0, 1 and 8, and omitting SQLStatement entirely.
+
+ Every Excel-backed variant blocked. A .csv has one implicit
+ table, so there is nothing to enumerate and no question to ask —
+ it was the only form that bound silently.
+
+ Hence: no Connection, no SQLStatement, just Name=<the .csv>.
+ Adding a Connection string back would reintroduce the dialog.
+
+--------------------------------------------------------------------
  KNOWN LIMITATIONS
 --------------------------------------------------------------------
 
- - Word's "Select Table" dialog may appear on template open
-   if the template has a saved data source link.
  - Requires Microsoft Word desktop installed.
  - Windows only (win32com).
  - Temp files are written to output_files/ during processing
@@ -263,11 +290,7 @@ class BirthRegistrationProcessor:
             print("DocuMate : ⚠️ No records found for merging.")
             return
 
-        # Reload full source to map filtered rows back to Word mail merge record positions
-        full_df = pd.read_excel(self.excel_path, sheet_name=self.sheet_name)
-        full_df["__merge_record__"] = full_df.index + 1
-
-        # Sort by Serial
+        # Sort by Serial so the merged document comes out in printing order.
         if "Serial" in self.data.columns:
             try:
                 self.data["__serial_num__"] = (
@@ -277,43 +300,9 @@ class BirthRegistrationProcessor:
             except Exception:
                 print("⚠️ Serial sort skipped.")
 
-        # Map File_Number to original Excel row position
-        merge_map = dict(
-            zip(full_df["File_Number"].astype(str).str.strip(), full_df["__merge_record__"])
-        )
-
-        self.data["__merge_record__"] = (
-            self.data["File_Number"].astype(str).str.strip().map(merge_map)
-        )
-
-        if self.data["__merge_record__"].isna().any():
-            raise ValueError("Some filtered records could not be mapped back to original Excel rows.")
-
-        merge_records = sorted(self.data["__merge_record__"].astype(int).tolist())
-
-        # Word Mail Merge only accepts a From/To range, so scattered records can't
-        # go out in one Execute — the gaps would drag in already-PRINTED rows.
-        # Split the selection into contiguous runs and merge each run on its own;
-        # the batch/combine machinery below stitches the pieces back together.
-        # merge_records is already sorted, so the runs (and the final document)
-        # come out in ascending record order no matter how scattered the source is.
-        runs = []
-        run_start = run_prev = merge_records[0]
-        for record in merge_records[1:]:
-            if record == run_prev + 1:
-                run_prev = record
-            else:
-                runs.append((run_start, run_prev))
-                run_start = run_prev = record
-        runs.append((run_start, run_prev))
-
         total_records = len(self.data)
         print(f"DocuMate : ⏳ Processing {total_records} records with Word Mail Merge...")
-        if len(runs) == 1:
-            print(f"DocuMate : 📌 Auto-selected range in Word: From {runs[0][0]} To {runs[0][1]}")
-        else:
-            spans = ", ".join(f"{s}-{e}" if s != e else str(s) for s, e in runs)
-            print(f"DocuMate : 📌 Records are scattered — merging {len(runs)} separate ranges: {spans}")
+
         if not os.path.exists(self.output_folder):
             print(f"DocuMate : 📂 Creating output folder '{self.output_folder}'...")
             os.makedirs(self.output_folder)
@@ -327,19 +316,45 @@ class BirthRegistrationProcessor:
         if not os.path.exists(template_abs):
             raise FileNotFoundError(f"Template not found: {template_abs}")
 
+        # --- CSV merge source -------------------------------------------------
+        # Word's "Select Table" dialog is caused by the ACE OLEDB *Excel*
+        # provider, not by sheet ambiguity. Measured directly: with a temp
+        # workbook holding exactly ONE sheet, Word still opened the picker and
+        # listed that single sheet. SubType 0, 1 and 8 all behaved the same, and
+        # dropping the SQLStatement made no difference — every Excel-backed
+        # variant blocked on the dialog. Handing Word a .csv was the only form
+        # that bound silently, in under 5 seconds.
+        #
+        # A .csv has one implicit table, so there is nothing to enumerate and no
+        # question to ask.
+        #
+        # Filtering here rather than inside Word also removes the need for run
+        # splitting. Gaps only existed because the merge ran against the full
+        # sheet with PRINTED rows in between; this file holds only the rows to
+        # process, so records are contiguous 1..N however scattered the source.
+        #
+        # utf-8-sig: Word needs the BOM to read the header row correctly.
+        merge_df = self.data.drop(
+            columns=[c for c in ("__serial_num__",) if c in self.data.columns]
+        )
+        temp_source = os.path.abspath(
+            os.path.join(self.output_folder, "__temp_merge_source.csv")
+        )
+        merge_df.to_csv(temp_source, index=False, encoding="utf-8-sig")
+        print(f"DocuMate : 🧾 Built CSV merge source — {len(merge_df)} records, 1 to {len(merge_df)}")
+
         # Batch setup - Word chokes on 1000+ records in a single Execute.
-        # Each contiguous run is chunked independently so no batch ever straddles
-        # a gap (which would pull in PRINTED rows). Runs are walked in ascending
-        # order, so the batch list — and the combined document — stays sequential.
+        # Records are contiguous now, so this is a plain walk over 1..N.
         batch_size = 250
         batches = []
-        for run_start, run_end in runs:
-            for i in range(run_start, run_end + 1, batch_size):
-                batches.append((i, min(i + batch_size - 1, run_end)))
+        for i in range(1, total_records + 1, batch_size):
+            batches.append((i, min(i + batch_size - 1, total_records)))
 
         word = None
         main_doc = None
         final_doc = None
+        # Batch .docx files only — this list is also what gets stitched together
+        # below, so the temp .csv must NOT go in it. It is cleaned up separately.
         temp_files = []
 
         try:
@@ -356,23 +371,18 @@ class BirthRegistrationProcessor:
             main_doc = word.Documents.Open(template_abs, ReadOnly=True, AddToRecentFiles=False)
             time.sleep(0.5)
 
-            sheet = self.sheet_name.replace("'", "''")
-
-            print("DocuMate : 🔗 Connecting data source,Please approve the action in Word file if prompted and wait for the document generation to complete...")
+            print("DocuMate : 🔗 Connecting CSV data source, please wait while I generate the documents...")
+            # Connect to the temp CSV, NOT the original workbook.
+            # Deliberately no Connection and no SQLStatement: supplying an ACE
+            # OLEDB connection string is what drags in the Excel provider and its
+            # table picker.
             main_doc.MailMerge.OpenDataSource(
-                Name=excel_abs,
+                Name=temp_source,
                 ConfirmConversions=False,
                 ReadOnly=True,
                 LinkToSource=True,
                 AddToRecentFiles=False,
                 Revert=False,
-                Connection=(
-                    "Provider=Microsoft.ACE.OLEDB.12.0;"
-                    f"Data Source={excel_abs};"
-                    'Extended Properties="Excel 12.0 Xml;HDR=YES;IMEX=1";'
-                ),
-                SQLStatement=f"SELECT * FROM [{sheet}$]",
-                SubType=0
             )
             print("DocuMate : ✅ Data source connected successfully, Please wait while I generate the documents...")
 
@@ -464,7 +474,7 @@ class BirthRegistrationProcessor:
                 pass
 
             # Clean temp files (retry — Word releases file locks a moment after Quit)
-            for f in temp_files:
+            for f in temp_files + [temp_source]:
                 for _attempt in range(10):
                     try:
                         if os.path.exists(f):

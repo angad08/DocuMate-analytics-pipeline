@@ -253,10 +253,6 @@ class BirthRegistrationProcessor:
             print("DocuMate : ⚠️ No records found for merging.")
             return
 
-        # Reload full source only to map filtered rows back to original Word mail merge record positions
-        full_df = pd.read_excel(self.excel_path, sheet_name=self.sheet_name)
-        full_df["__merge_record__"] = full_df.index + 1
-
         # Same sorting idea as original generation flow
         if "Serial" in self.data.columns:
             try:
@@ -267,34 +263,19 @@ class BirthRegistrationProcessor:
             except Exception:
                 print("⚠️ Some Serial values could not be converted, sorting skipped.")
 
-        merge_map = dict(
-            zip(full_df["File_Number"].astype(str).str.strip(), full_df["__merge_record__"])
-        )
-
-        self.data["__merge_record__"] = (
-            self.data["File_Number"].astype(str).str.strip().map(merge_map)
-        )
-
-        if self.data["__merge_record__"].isna().any():
-            raise ValueError("Some filtered records could not be mapped back to original Excel rows.")
-
-        merge_records = sorted(self.data["__merge_record__"].astype(int).tolist())
-
-        first_record = min(merge_records)
-        last_record = max(merge_records)
-
-        # Direct From/To is safe only when records are continuous
-        expected = list(range(first_record, last_record + 1))
-        if merge_records != expected:
-            raise ValueError(
-                "Filtered IN PROCESS records are not continuous in the Excel source. "
-                "Direct Word Mail Merge range would include unwanted rows in between."
-            )
+        # Merging from a temp .csv of just the filtered rows removes the old
+        # "records must be continuous" restriction entirely. That rule existed
+        # because the merge ran against the full sheet, where a From/To range
+        # spanning a gap would sweep in already-PRINTED rows. Here the file holds
+        # only the rows to process, so the range is always 1..N.
+        # See DATA SOURCE in the header for why it must be a .csv and not .xlsx.
+        first_record = 1
+        last_record = len(self.data)
 
         total_records = len(self.data)
         print(f"DocuMate : ⏳ Generating and merging {total_records} documents...\n")
-        print("DocuMate : 🔗 Connecting data source,Please approve the action in Word file if prompted and wait for the document generation to complete...")
-        
+        print("DocuMate : 🔗 Connecting CSV data source, please wait while I generate the documents...")
+
         if not os.path.exists(self.output_folder):
             print(f"\nDocuMate : 📂 Output folder '{self.output_folder}' does not exist. Creating it...")
             os.makedirs(self.output_folder)
@@ -308,6 +289,18 @@ class BirthRegistrationProcessor:
 
         if not os.path.exists(template_abs):
             raise FileNotFoundError(f"Template not found: {template_abs}")
+
+        # Write the filtered rows to a temp .csv and merge from that. See DATA
+        # SOURCE in the header: an .xlsx source makes Word open its "Select
+        # Table" dialog no matter what SQLStatement or SubType is passed.
+        # utf-8-sig so Word reads the header row correctly.
+        merge_df = self.data.drop(
+            columns=[c for c in ("__serial_num__",) if c in self.data.columns]
+        )
+        temp_source = os.path.abspath(
+            os.path.join(self.output_folder, "__temp_merge_source.csv")
+        )
+        merge_df.to_csv(temp_source, index=False, encoding="utf-8-sig")
 
         word = None
         main_doc = None
@@ -326,21 +319,16 @@ class BirthRegistrationProcessor:
             main_doc = word.Documents.Open(template_abs, ReadOnly=True, AddToRecentFiles=False)
             time.sleep(0.5)
 
-            sheet = self.sheet_name.replace("'", "''")
-            
+            # Connect to the temp CSV, NOT the workbook. Deliberately no
+            # Connection and no SQLStatement: supplying an ACE OLEDB connection
+            # string is what drags in the Excel provider and its table picker.
             main_doc.MailMerge.OpenDataSource(
-                Name=excel_abs,
+                Name=temp_source,
                 ConfirmConversions=False,
                 ReadOnly=True,
                 LinkToSource=True,
                 AddToRecentFiles=False,
                 Revert=False,
-                Connection=(
-                    "Provider=Microsoft.ACE.OLEDB.12.0;"
-                    f"Data Source={excel_abs};"
-                    'Extended Properties="Excel 12.0 Xml;HDR=YES;IMEX=1";'
-                ),
-                SQLStatement=f"SELECT * FROM [{sheet}$]"
             )
 
             time.sleep(0.5)
@@ -393,6 +381,19 @@ class BirthRegistrationProcessor:
                 pythoncom.CoUninitialize()
             except Exception:
                 pass
+
+            # Delete the temp merge source. It holds real personal data, so it
+            # must not be left behind. Retried because Word releases the file
+            # lock a moment after Quit returns.
+            for _attempt in range(10):
+                try:
+                    if os.path.exists(temp_source):
+                        os.remove(temp_source)
+                    break
+                except OSError:
+                    time.sleep(1)
+            else:
+                print(f"⚠️ DocuMate : Could not delete temp file: {temp_source}")
 
             # Clean helper cols
             if self.data is not None:

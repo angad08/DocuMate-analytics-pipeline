@@ -27,21 +27,28 @@
  directly.
 
  The solution: DocuMate108 writes the filtered database records
- to a temporary Excel file, points Word's Mail Merge at it,
+ to a temporary CSV file, points Word's Mail Merge at it,
  processes in batches of 250, combines the batch outputs into
  one final document, then cleans up the temp file.
 
  Pipeline:
    PostgreSQL --> load_data() --> list of dicts
-     --> temp Excel file (only filtered records)
+     --> temp CSV file (only filtered records)
        --> Word Mail Merge (batched, 250 per batch)
          --> temp .docx per batch
            --> combined into one final .docx
              --> temp files cleaned up
 
- Because the temp Excel contains ONLY the filtered "IN PROCESS"
+ Because the temp file contains ONLY the filtered "IN PROCESS"
  records, the Mail Merge range is always 1 to N. No row-mapping
  gymnastics needed -- every row in the temp file is a valid record.
+
+ CSV and not .xlsx on purpose. Handing Word a workbook means
+ handing it the ACE OLEDB Excel provider, which makes Word open
+ its "Select Table" dialog on every run -- regardless of the
+ SQLStatement or SubType passed, and even when the workbook has
+ exactly one sheet. A .csv has one implicit table, so there is
+ nothing to enumerate and nothing to ask.
 
 --------------------------------------------------------------------
  WHAT CHANGED FROM Z AND X
@@ -109,14 +116,14 @@
  KNOWN LIMITATIONS
 --------------------------------------------------------------------
 
- - Database credentials are hardcoded (no config file or env vars)
+ - The database password comes from DOCUMATE_DB_PASSWORD (a .env
+   file or a real environment variable). Host, database, user and
+   port are still literals in __main__.
  - No reconnection logic if the database connection drops
  - Popups are Windows-only (ctypes.windll)
  - Requires Microsoft Word desktop installed (COM automation)
  - Windows only (win32com / pythoncom)
  - Auto-detect mode has no graceful shutdown beyond Ctrl+C
- - Word's "Select Table" dialog may appear on template open
-   if the template has a saved data source link
  - Temp files are written during processing and cleaned up after.
    If the process crashes mid-batch, leftover temp files may remain.
 
@@ -139,6 +146,17 @@ import ctypes                                # For Windows popup messages
 from datetime import datetime                # For timestamps in filenames
 import psycopg2                              # PostgreSQL database driver
 import datetime as dt                        # For date operations in SQL updates
+
+# Load DOCUMATE_DB_PASSWORD from a .env file in the project root, if one is
+# there. Optional on purpose: without python-dotenv installed this quietly does
+# nothing and the value falls back to a real environment variable.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
+    ))
+except ImportError:
+    pass
 
 try:
     import pythoncom                         # COM threading initialisation
@@ -354,17 +372,23 @@ class BirthRegistrationProcessor:
             print(f"DocuMate : 📂 Creating output folder '{self.output_folder}'...")
             os.makedirs(self.output_folder)
 
-        # --- Write filtered records to a temporary Excel file ---
+        # --- Write filtered records to a temporary CSV file ---
         # This is the bridge between PostgreSQL and Word Mail Merge.
         # The temp file lives in the output folder and gets cleaned
         # up in the finally block.
+        #
+        # CSV rather than .xlsx on purpose. Handing Word a workbook means
+        # handing it the ACE OLEDB Excel provider, which makes Word open its
+        # "Select Table" dialog on every run — regardless of the SQLStatement
+        # or SubType passed, and even when the workbook has only one sheet.
+        # A .csv has one implicit table, so there is nothing to ask about.
+        # utf-8-sig so Word reads the header row correctly.
         temp_excel_path = os.path.abspath(
-            os.path.join(self.output_folder, "__temp_mail_merge_source.xlsx")
+            os.path.join(self.output_folder, "__temp_mail_merge_source.csv")
         )
-        temp_sheet_name = "DocuMateData"
 
         df = pd.DataFrame(self.data)
-        df.to_excel(temp_excel_path, sheet_name=temp_sheet_name, index=False, engine="openpyxl")
+        df.to_csv(temp_excel_path, index=False, encoding="utf-8-sig")
 
         template_abs = os.path.abspath(self.template_path)
         output_path = os.path.abspath(os.path.join(self.output_folder, merged_filename))
@@ -397,9 +421,10 @@ class BirthRegistrationProcessor:
             main_doc = word.Documents.Open(template_abs, ReadOnly=True, AddToRecentFiles=False)
             time.sleep(0.5)
 
-            sheet = temp_sheet_name.replace("'", "''")
-
-            print("DocuMate : 🔗 Connecting data source. Please approve the action in Word if prompted and wait for document generation to complete...")
+            # Deliberately no Connection and no SQLStatement: supplying an ACE
+            # OLEDB connection string is what drags in the Excel provider and
+            # its table picker. Word opens the .csv directly.
+            print("DocuMate : 🔗 Connecting CSV data source, please wait while documents are generated...")
             main_doc.MailMerge.OpenDataSource(
                 Name=temp_excel_path,
                 ConfirmConversions=False,
@@ -407,13 +432,6 @@ class BirthRegistrationProcessor:
                 LinkToSource=True,
                 AddToRecentFiles=False,
                 Revert=False,
-                Connection=(
-                    "Provider=Microsoft.ACE.OLEDB.12.0;"
-                    f"Data Source={temp_excel_path};"
-                    'Extended Properties="Excel 12.0 Xml;HDR=YES;IMEX=1";'
-                ),
-                SQLStatement=f"SELECT * FROM [{sheet}$]",
-                SubType=0
             )
             print("DocuMate : ✅ Data source connected successfully. Please wait while documents are generated...")
 
@@ -726,13 +744,21 @@ if __name__ == "__main__":
         else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
 
+    # Supabase connection, via the Session pooler (IPv4-friendly). The direct
+    # db.<ref>.supabase.co host has no DNS record and cannot be reached, so the
+    # pooler host is used here — note it requires the user to be
+    # postgres.<project-ref> rather than plain postgres.
+    #
+    # WARNING: these credentials are hardcoded. src/ is tracked by git and
+    # pushed to GitHub, so committing this file puts the password in the history
+    # permanently. Rotate the password in Supabase if that happens.
     db_config = {
-        "host": "YOUR_DB_HOST",
-        "database": "YOUR_DB_NAME",
-        "user": "YOUR_DB_USER",
-        "password": "YOUR_DB_PASSWORD",
+        "host": "aws-1-ap-southeast-2.pooler.supabase.com",
+        "database": "postgres",
+        "user": "postgres.echjbuprlnxkbxflylzf",
+        "password": os.getenv("DOCUMATE_DB_PASSWORD", ""),
         "port": 5432,
-        "sslmode": "require"
+        "sslmode": "require",
     }
 
     docuMateAgent = BirthRegistrationProcessor(

@@ -1,3 +1,7 @@
+# Secrets - never commit the real database password
+.env
+.env.local
+
 # Python cache
 __pycache__/
 *.pyc

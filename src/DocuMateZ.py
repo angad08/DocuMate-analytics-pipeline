@@ -107,7 +107,9 @@
  KNOWN LIMITATIONS
 --------------------------------------------------------------------
 
- - Database credentials are hardcoded (no config file or env vars)
+ - The database password comes from DOCUMATE_DB_PASSWORD (a .env
+   file or a real environment variable). Host, database, user and
+   port are still literals in __main__.
  - No reconnection logic if the database connection drops
  - Popups are still Windows-only
  - Auto-detect mode has no graceful shutdown beyond Ctrl+C
@@ -131,6 +133,18 @@ from datetime import datetime                # For timestamps in filenames
 from io import BytesIO                       # For holding rendered docs in memory
 import psycopg2                              # PostgreSQL database driver
 import datetime as dt                        # For date operations in SQL updates
+
+# Load DOCUMATE_DB_PASSWORD from a .env file in the project root, if one is
+# there. Optional on purpose: without python-dotenv installed this quietly does
+# nothing and the value falls back to a real environment variable.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
+    ))
+except ImportError:
+    pass
+
 from concurrent.futures import ProcessPoolExecutor as Executor  # Parallel executor
 import multiprocessing                       # For freeze_support in .exe builds
 
@@ -598,13 +612,21 @@ if __name__ == "__main__":
         else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
 
+    # Supabase connection, via the Session pooler (IPv4-friendly). The direct
+    # db.<ref>.supabase.co host has no DNS record and cannot be reached, so the
+    # pooler host is used here — note it requires the user to be
+    # postgres.<project-ref> rather than plain postgres.
+    #
+    # WARNING: these credentials are hardcoded. src/ is tracked by git and
+    # pushed to GitHub, so committing this file puts the password in the history
+    # permanently. Rotate the password in Supabase if that happens.
     db_config = {
-        "host": "YOUR_DB_HOST",
-        "database": "YOUR_DB_NAME",
-        "user": "YOUR_DB_USER",
-        "password": "YOUR_DB_PASSWORD",
+        "host": "aws-1-ap-southeast-2.pooler.supabase.com",
+        "database": "postgres",
+        "user": "postgres.echjbuprlnxkbxflylzf",
+        "password": os.getenv("DOCUMATE_DB_PASSWORD", ""),
         "port": 5432,
-        "sslmode": "require"
+        "sslmode": "require",
     }
 
     docuMateAgent = BirthRegistrationProcessor(
