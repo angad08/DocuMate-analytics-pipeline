@@ -123,7 +123,9 @@ Up to this point, every version used `docxtpl` as the rendering engine: Python f
 
 But the workplace already had Microsoft Word installed on every machine. Word has its own built-in document generation engine: Mail Merge. It is designed for exactly this job -- reading a data source and producing filled documents in bulk. The question was: could Python control Word's Mail Merge engine directly instead of rendering documents itself?
 
-Y answered that question. Using `win32com` and COM automation, Python opens the Word template, connects the Excel data source, sets the record range, and tells Word to execute the merge. Python stops being the renderer and becomes the orchestrator. Word does what it was built to do, and Python controls when, what, and how many.
+Y answered that question. Using `win32com` and COM automation, Python opens the Word template, connects the data source, sets the record range, and tells Word to execute the merge. Python stops being the renderer and becomes the orchestrator. Word does what it was built to do, and Python controls when, what, and how many.
+
+One practical detail applies to all three Mail Merge versions. Pointing Word at an `.xlsx` means connecting through the ACE OLEDB Excel provider, which treats the workbook as a database where each sheet is a table -- so Word raises its "Select Table" dialog and waits for a human before it will run the query, making unattended runs impossible. It does this regardless of the `SQLStatement` passed, and even when the workbook contains exactly one sheet. Y, X and O therefore write the rows to process to a temporary CSV and merge from that: a CSV has one implicit table, so there is nothing to choose and nothing to ask.
 
 This was the first crossover: Python driving a desktop application programmatically to automate a process that previously required manual clicks through Word's UI.
 
@@ -133,7 +135,9 @@ Like the other Excel versions, Y selects every row not yet marked "PRINTED" (`IN
 
 Y worked well on small volumes but hung on large ones. When Word tried to process 1,000+ records in a single `Execute()` call, the COM interface became unresponsive. X solved this by splitting the record range into batches of 250. Each batch produces a temporary `.docx` file, and after all batches complete, the files are combined into one final document using Word's `InsertFile` method. Temp files are cleaned up automatically.
 
-X keeps the same Excel record selection as the other Excel versions -- every row not yet marked "PRINTED" (`IN PROCESS`, blank, or any other non-`PRINTED` status) -- and because the batching requires those filtered rows to be contiguous in the sheet, broadening the filter also means blank-status rows between active records are now picked up rather than breaking the continuous range.
+X keeps the same Excel record selection as the other Excel versions -- every row not yet marked "PRINTED" (`IN PROCESS`, blank, or any other non-`PRINTED` status).
+
+Those filtered rows do not have to sit together in the sheet. X writes them to a temporary CSV and merges from that, so the records are always numbered 1..N with no gaps, however scattered they are in the source. Earlier revisions merged against the full worksheet, which meant a `From`/`To` range spanning a gap would have swept in already-`PRINTED` rows -- so the run was refused outright unless the selection happened to be contiguous. Filtering before Word rather than inside it removes that restriction entirely.
 
 This turned a hanging system into the fastest version of DocuMate at the time.
 
@@ -147,7 +151,7 @@ Z also added an auto-detection mode: a polling loop that checks for new "IN PROC
 
 O is the convergence. It takes Z's PostgreSQL backend and combines it with X's batched Word Mail Merge engine.
 
-The challenge was that Word's Mail Merge cannot connect to a database directly -- it expects a flat file (Excel, CSV, or Access). O bridges this gap: records are pulled from PostgreSQL via `load_data()`, written to a temporary Excel file, and that temp file becomes the Mail Merge data source. After processing, the temp file is cleaned up automatically. The database handles data, Word handles rendering, and Python orchestrates everything in between.
+The challenge was that Word's Mail Merge cannot connect to a database directly -- it expects a flat file (Excel, CSV, or Access). O bridges this gap: records are pulled from PostgreSQL via `load_data()`, written to a temporary CSV file, and that temp file becomes the Mail Merge data source. After processing, the temp file is cleaned up automatically. The database handles data, Word handles rendering, and Python orchestrates everything in between.
 
 O closes the loop:
 
@@ -261,22 +265,26 @@ Create a PostgreSQL database and run the included schema file:
 psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f sql/DocuMate_Data_Schema.sql
 ```
 
-Update the database credentials in:
+The password is read from the `DOCUMATE_DB_PASSWORD` environment variable, so it is never committed. Copy the template and fill it in:
 
-```
-src/DocuMateZ.py
-src/DocuMateO.py
-src/loadData.py
+```bash
+cp .env.example .env
 ```
 
-Example configuration:
+```
+DOCUMATE_DB_PASSWORD=your-password-here
+```
+
+`.env` is gitignored. If `python-dotenv` is not installed the file is simply ignored and the value falls back to a real environment variable, so exporting it in your shell works too.
+
+Host, database, user and port are ordinary literals in `src/DocuMateZ.py`, `src/DocuMateO.py` and `src/loadData.py` -- they are not secrets. Edit them there to point at your own database:
 
 ```python
 db_config = {
     "host": "YOUR_DB_HOST",
     "database": "YOUR_DB_NAME",
     "user": "YOUR_DB_USER",
-    "password": "YOUR_DB_PASSWORD",
+    "password": os.getenv("DOCUMATE_DB_PASSWORD", ""),
     "port": 5432,
     "sslmode": "require"
 }
@@ -329,7 +337,7 @@ Reads from PostgreSQL, renders using `docxtpl`. Supports **auto-detection mode**
 python src/DocuMateO.py
 ```
 
-The latest convergence version. Reads from PostgreSQL, writes a temporary Excel bridge, processes via batched Word Mail Merge, cleans up the temp file automatically. Supports auto-detection mode, same as Z.
+The latest convergence version. Reads from PostgreSQL, writes a temporary CSV bridge, processes via batched Word Mail Merge, cleans up the temp file automatically. Supports auto-detection mode, same as Z.
 
 ---
 
@@ -389,7 +397,9 @@ In the docxtpl template, these appear as `{{Name}}`, `{{Serial}}`, etc. In the M
 
 #### Note for DocuMateO
 
-DocuMateO does not use the Excel file as its data source at runtime. It pulls records from PostgreSQL and writes them to a temporary Excel file as a bridge for Word's Mail Merge engine. The template still needs to be configured once with the Excel file (steps above) so that Word recognises the merge fields. At runtime, DocuMateO overrides the data source connection to point at the temp file automatically.
+DocuMateO does not use the Excel file as its data source at runtime. It pulls records from PostgreSQL and writes them to a temporary CSV file as a bridge for Word's Mail Merge engine. The template still needs to be configured once with the Excel file (steps above) so that Word recognises the merge fields. At runtime, DocuMateO overrides the data source connection to point at the temp file automatically.
+
+The same applies to Y and X: whatever data source the template was configured with is replaced at runtime by a temporary CSV containing only the rows to process.
 
 ---
 
@@ -420,7 +430,8 @@ Some engineering decisions made during development:
 - **Merged output generation** with `docxcompose` to combine all documents into a single print-ready file (v3, Z)
 - **COM automation of Word Mail Merge** using `win32com` via `DispatchEx` to control Word's native rendering engine from Python (Y, X, O)
 - **Batched Mail Merge execution** in groups of 250 records to prevent Word from hanging on large volumes (X, O)
-- **Temp Excel bridge** to connect PostgreSQL data to Word's Mail Merge engine, which cannot read from a database directly (O)
+- **Temp CSV bridge** to connect PostgreSQL data to Word's Mail Merge engine, which cannot read from a database directly (O)
+- **CSV rather than Excel as the merge source** to stop Word raising its "Select Table" dialog, which blocked every unattended run (Y, X, O)
 - **Batch database updates** with rollback protection to prevent partial status updates on failure
 - **Dynamic year injection** to avoid hardcoded template values that break on year transitions
 - **Validation before processing** to catch bad data before it enters the document generation stage
