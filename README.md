@@ -11,8 +11,8 @@ What started as a simple Python script gradually evolved into a structured syste
 - processing status updates
 - Power BI reporting
 
-Manual processing of roughly **1,440 records typically required nearly two months of manual effort**.
-DocuMate reduces that to **minutes of automated processing**, with safeguards that stop bad data before it turns into bad output.
+At the benchmarked manual rate of **315 seconds per record**, processing **1,440 records represents 453,600 seconds (126 hours) of hands-on work**.
+DocuMate reduces the same workload to **minutes of automated processing**, with safeguards that stop bad data before it turns into bad output.
 
 ---
 
@@ -440,19 +440,21 @@ Some engineering decisions made during development:
 
 ## Performance
 
-Benchmarked on 108 records (34,020 seconds manual equivalent):
+Benchmarked on **1,440 records**. At the manual benchmark of **315 seconds per record**, the same workload represents **453,600 seconds (126 hours) of hands-on processing**.
 
-| Version | Time | Efficiency | Rendering Engine | Significance |
-|---------|------|------------|------------------|--------------|
-| v1 | 50.6s | 99.85% | Python (docxtpl) | Proved automation was already faster than manual work |
-| v2 | 9.96s | 99.97% | Python (docxtpl) | Strong raw speed for smaller runs |
-| v3 (PLUS) | 28.6s | 99.92% | Python (docxtpl) | Slower than v2, but added validation, merging, and parallel processing |
-| Y | 37.85s | 99.89% | Word Mail Merge + Excel | First Python-to-Word Mail Merge crossover |
-| X | 27.82s | 99.92% | Word Mail Merge + Excel | Mail Merge branch made scalable with batching |
-| Z | 23.06s | 99.93% | Python (docxtpl) + PostgreSQL | Database-backed generation with auto-detection |
-| **O** | **16.1s** | **99.95%** | **Word Mail Merge + PostgreSQL** | **Complete system: DB + Mail Merge + write-back + reporting** |
+| Version | Total Time | Time per Record | Rendering Engine | Significance |
+|---------|-----------:|----------------:|------------------|--------------|
+| v1 | 26.06s | 0.018097s | Python (docxtpl) | Proof of concept with the lowest raw time in this benchmark |
+| v2 | 26.18s | 0.018181s | Python (docxtpl) | Added structure and error handling with near-identical raw speed |
+| Y | 40.07s | 0.027826s | Word Mail Merge + Excel | First Python-to-Word Mail Merge crossover |
+| X | 79.59s | 0.055271s | Batched Word Mail Merge + Excel | Added batching to keep large-volume Mail Merge runs reliable |
+| **O** | **100.23s** | **0.069604s** | **Batched Word Mail Merge + PostgreSQL** | **Production recommendation: database + Mail Merge + write-back + reporting** |
+| Z | 158.33s | 0.109951s | Python (docxtpl) + PostgreSQL | Database-backed generation with auto-detection |
+| v3 (PLUS) | 161.52s | 0.112167s | Python (docxtpl) | Added five-stage validation, merging, and parallel processing |
 
-The goal of the later versions was not just raw speed. It was to improve reliability, scalability, and process control while still remaining dramatically faster than manual work. DocuMateO is not the fastest in raw time (v2 is), but it is the only version that closes the full loop: data source, validation, generation, write-back, and reporting in one system.
+The benchmark shows why raw time alone is not the selection criterion. v1 and v2 are faster because they do less: they do not include the later validation, database, status-tracking, auto-detection, and reporting capabilities. PLUS and Z add those controls and architectural improvements. O brings the full workflow together while reducing processing time by **37.95% compared with PLUS** and **99.98% compared with the manual benchmark**.
+
+DocuMateO remains the production recommendation because it closes the full loop: data source, validation, generation, write-back, and reporting in one system.
 
 ---
 
