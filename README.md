@@ -444,13 +444,13 @@ Benchmarked on **1,440 records**. At the manual benchmark of **315 seconds per r
 
 | Version | Total Time | Time per Record | Rendering Engine | Significance |
 |---------|-----------:|----------------:|------------------|--------------|
-| v1 | 26.06s | 0.018097s | Python (docxtpl) | Proof of concept with the lowest raw time in this benchmark |
-| v2 | 26.18s | 0.018181s | Python (docxtpl) | Added structure and error handling with near-identical raw speed |
-| Y | 40.07s | 0.027826s | Word Mail Merge + Excel | First Python-to-Word Mail Merge crossover |
-| X | 79.59s | 0.055271s | Batched Word Mail Merge + Excel | Added batching to keep large-volume Mail Merge runs reliable |
-| **O** | **100.23s** | **0.069604s** | **Batched Word Mail Merge + PostgreSQL** | **Production recommendation: database + Mail Merge + write-back + reporting** |
-| Z | 158.33s | 0.109951s | Python (docxtpl) + PostgreSQL | Database-backed generation with auto-detection |
-| v3 (PLUS) | 161.52s | 0.112167s | Python (docxtpl) | Added five-stage validation, merging, and parallel processing |
+| v1 | 26.06s | 0.018097222s | Python (docxtpl) | Proof of concept with the lowest raw time in this benchmark |
+| v2 | 26.18s | 0.018180556s | Python (docxtpl) | Added structure and error handling with near-identical raw speed |
+| Y | 40.07s | 0.027826389s | Word Mail Merge + Excel | First Python-to-Word Mail Merge crossover |
+| X | 79.59s | 0.055270833s | Batched Word Mail Merge + Excel | Added batching to keep large-volume Mail Merge runs reliable |
+| **O** | **100.23s** | **0.069604167s** | **Batched Word Mail Merge + PostgreSQL** | **Production recommendation: database + Mail Merge + write-back + reporting** |
+| Z | 158.33s | 0.109951389s | Python (docxtpl) + PostgreSQL | Database-backed generation with auto-detection |
+| v3 (PLUS) | 161.52s | 0.112166667s | Python (docxtpl) | Added five-stage validation, merging, and parallel processing |
 
 The benchmark shows why raw time alone is not the selection criterion. v1 and v2 are faster because they do less: they do not include the later validation, database, status-tracking, auto-detection, and reporting capabilities. PLUS and Z add those controls and architectural improvements. O brings the full workflow together while reducing processing time by **37.95% compared with PLUS** and **99.98% compared with the manual benchmark**.
 
