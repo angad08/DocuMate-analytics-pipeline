@@ -10,11 +10,11 @@ import datetime
 
 import pandas as pd
 
-from documate.setup import messages
-from documate.sources.queries import ADD_DATE_ISSUED_COLUMN
-from documate.sources.queries import DATE_ISSUED_EXISTS
-from documate.sources.queries import MARK_PRINTED
-from documate.sources.queries import PENDING_APPLICANTS
+from setup import messages
+from sources.queries import ADD_DATE_ISSUED_COLUMN
+from sources.queries import DATE_ISSUED_EXISTS
+from sources.queries import MARK_PRINTED
+from sources.queries import PENDING_APPLICANTS
 
 
 # The columns the query returns, in order. Kept next to the query so a

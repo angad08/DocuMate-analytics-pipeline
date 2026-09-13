@@ -50,10 +50,10 @@ import time
 
 import pandas as pd
 
-from documate.setup import messages
-from documate.engines import word_com
-from documate.engines.output_paths import delete_temp_file
-from documate.engines.output_paths import make_output_folder
+from setup import messages
+from engines import word_com
+from engines.output_paths import delete_temp_file
+from engines.output_paths import make_output_folder
 
 
 # How many records go into each run of Word. Word stops responding if you

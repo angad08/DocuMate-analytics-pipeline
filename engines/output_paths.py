@@ -6,7 +6,7 @@ import os
 import time
 from datetime import datetime
 
-from documate.setup import messages
+from setup import messages
 
 
 def make_output_folder(folder):

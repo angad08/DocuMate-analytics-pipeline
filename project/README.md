@@ -81,14 +81,14 @@ Full benchmark table and the reasoning behind each version:
 The Excel versions (`v3`, `x`, `y`) need no database and run straight after install.
 
 ```bash
-pip install -r documate/requirements.txt
-python documate/main.py --check     # confirms paths and packages
-python documate/main.py --list      # shows the five versions
-python documate/main.py v3          # generates from the sample workbook
+pip install -r requirements.txt
+python main.py --check     # confirms paths and packages
+python main.py --list      # shows the five versions
+python main.py v3          # generates from the sample workbook
 ```
 
-Documents land in `documate/files/output/`. The workbook in
-`documate/files/data/` is synthetic test data, so a fresh clone runs with no
+Documents land in `files/output/`. The workbook in
+`files/data/` is synthetic test data, so a fresh clone runs with no
 setup at all.
 
 The Mail Merge versions (`x`, `y`, `o`) drive Microsoft Word through COM, so
@@ -106,8 +106,8 @@ Python does.
 | **o** | PostgreSQL | Word Mail Merge | 100 at a time. The complete version |
 
 ```bash
-python documate/main.py z --once
-python documate/main.py x --poll --interval 300
+python main.py z --once
+python main.py x --poll --interval 300
 ```
 
 ---
@@ -145,11 +145,11 @@ VERSIONS["p"] = Version(
 )
 ```
 
-`python documate/main.py p` then works, and the version tests cover it
+`python main.py p` then works, and the version tests cover it
 automatically.
 
 ```bash
-python -m pytest documate/tests -q     # 39 passed
+python -m pytest tests -q     # 39 passed
 ```
 
 Covers the five checks, status matching, date handling, Serial sorting, the Mail
@@ -163,7 +163,7 @@ the version list's own consistency.
 Only needed for `z` and `o`.
 
 ```bash
-psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f documate/project/database_schema/DocuMate_Data_Schema.sql
+psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f project/database_schema/DocuMate_Data_Schema.sql
 ```
 
 That creates four normalised tables: `applicant`, `ministryofhomeaffairs`,
@@ -192,8 +192,8 @@ names the variable instead of failing later with a confusing connection error.
 Load sample records:
 
 ```bash
-python -m documate.tools.seed_database --insert
-python -m documate.tools.seed_database --select    # what is pending
+python -m tools.seed_database --insert
+python -m tools.seed_database --select    # what is pending
 ```
 
 The demo environment uses Supabase, but any PostgreSQL host works.

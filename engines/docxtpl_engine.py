@@ -12,10 +12,10 @@ the same list of records, there was no reason for two copies.
 import os
 from io import BytesIO
 
-from documate.setup import messages
-from documate.setup import ui
-from documate.engines.output_paths import make_output_folder
-from documate.engines.render import render_record
+from setup import messages
+from setup import ui
+from engines.output_paths import make_output_folder
+from engines.render import render_record
 
 
 class DocxtplEngine:

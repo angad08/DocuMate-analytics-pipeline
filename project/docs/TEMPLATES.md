@@ -9,7 +9,7 @@ are changing the certificate layout or pointing DocuMate at a different form.
 
 ## Template Setup
 
-DocuMate uses two types of Word templates depending on the rendering engine. Both live in the `documate/files/templates/` folder.
+DocuMate uses two types of Word templates depending on the rendering engine. Both live in the `files/templates/` folder.
 
 ### docxtpl template (v1, v2, v3, Z)
 
@@ -35,7 +35,7 @@ No special Word configuration is needed. The file is a normal `.docx` document -
 2. Go to the **Mailings** tab in the ribbon.
 3. Click **Start Mail Merge** and select **Letters** (or **Normal Word Document**).
 4. Click **Select Recipients** and choose **Use an Existing List**.
-5. Browse to `documate/files/data/DocuMate_DataFrame.xlsx` and select it.
+5. Browse to `files/data/DocuMate_DataFrame.xlsx` and select it.
 6. If prompted, select the **DocuMateSRC** sheet.
 7. Word now knows which data source the template is linked to.
 8. Place your cursor where each field should appear in the document and click **Insert Merge Field** to add the placeholders.
@@ -59,7 +59,7 @@ Both templates use the same field names, which correspond to the column names pr
 
 In the docxtpl template, these appear as `{{Name}}`, `{{Serial}}`, etc. In the Mail Merge template, these are inserted via Word's **Insert Merge Field** button.
 
-9. Once all merge fields are placed, save the Mail Merge template as `DOCUMENT_TEMPLATE_FILE_MM.docx` in the `documate/files/templates/` folder.
+9. Once all merge fields are placed, save the Mail Merge template as `DOCUMENT_TEMPLATE_FILE_MM.docx` in the `files/templates/` folder.
 
 #### Note for DocuMateO
 

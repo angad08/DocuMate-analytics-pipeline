@@ -17,8 +17,8 @@ def project_root():
     Three cases:
       - DOCUMATE_ROOT is set  ->  use that (handy for testing)
       - running as a .exe     ->  the exe sits in dist\\, so go up one
-      - running as a script   ->  this file is documate\\setup\\config.py,
-                                  so go up two
+      - running as a script   ->  this file is setup\\config.py,
+                                  so go up one
     """
     override = os.getenv("DOCUMATE_ROOT")
     if override:
@@ -27,14 +27,12 @@ def project_root():
     if getattr(sys, "frozen", False):
         return os.path.dirname(os.path.dirname(sys.executable))
 
-    return os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # The settings file. ".env" is the usual name, but Windows Explorer makes
 # it awkward to create a file whose name starts with a dot, so anything
-# ending in ".env" works too - DocuMate_env.env, documate.env, and so on.
+# ending in ".env" works too - DocuMate_env.env, env, and so on.
 # ".env.example" is skipped on purpose: it is the blank template, and
 # picking it up would look like the settings loaded when they hadn't.
 ENV_FILENAMES = [".env", "DocuMate_env", "env.txt"]
@@ -46,8 +44,8 @@ def env_file():
     """
     Find the settings file, or return None if there isn't one.
 
-    Looks in the project root - the folder with main.py in it, NOT inside
-    documate/. Exact names first, then any file ending in .env.
+    Looks in the project root, alongside main.py. Exact names first, then any
+    file ending in .env.
     """
     root = project_root()
 
@@ -86,12 +84,10 @@ def load_environment():
 
 def package_folder():
     """
-    The documate folder itself.
-
-    The code lives in here. What the code reads and writes lives one level
-    down in files/ - see files_folder() below.
+    The project root. The package was flattened so all runtime folders sit
+    directly beside main.py.
     """
-    return os.path.join(project_root(), "documate")
+    return project_root()
 
 
 def files_folder():

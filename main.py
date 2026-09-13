@@ -1,36 +1,23 @@
 """
 DocuMate - run any version from here.
 
-    python documate\\main.py v3    Excel + docxtpl (the production one)
-    python documate\\main.py x     Excel + Word Mail Merge, 250 at a time
-    python documate\\main.py y     Excel + Word Mail Merge, all in one go
-    python documate\\main.py z     PostgreSQL + docxtpl
-    python documate\\main.py o     PostgreSQL + Word Mail Merge
+    python main.py v3    Excel + docxtpl (the production one)
+    python main.py x     Excel + Word Mail Merge, 250 at a time
+    python main.py y     Excel + Word Mail Merge, all in one go
+    python main.py z     PostgreSQL + docxtpl
+    python main.py o     PostgreSQL + Word Mail Merge
 
-    python documate\\main.py --list    show every version and what it uses
-    python documate\\main.py --check   check the setup and stop
-    python documate\\main.py z --once  run Z once instead of on a loop
-    python documate\\main.py x --poll  make any version check on a loop
+    python main.py --list    show every version and what it uses
+    python main.py --check   check the setup and stop
+    python main.py z --once  run Z once instead of on a loop
+    python main.py x --poll  make any version check on a loop
 
-This also works, and is the tidier way to type it:
-
-    python -m documate.main v3
 """
 
 import argparse
 import multiprocessing
-import os
 import sys
-
-# This file sits inside documate\, so when you run it directly Python puts
-# documate\ on the import path - not the folder above it, which is where
-# "import documate" has to look from. Add the folder above, so both
-# "python documate\main.py" and "python -m documate.main" work.
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from documate import versions
+import versions
 
 
 def build_parser():
@@ -98,7 +85,7 @@ def check_setup():
     instead of a guess. Never prints the password.
     """
     import os
-    from documate.setup import config
+    from setup import config
 
     print("\nDocuMate setup check")
     print("=" * 60)

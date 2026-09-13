@@ -13,8 +13,8 @@ hands the records over.
 
 import time
 
-from documate.setup import messages
-from documate.setup import ui
+from setup import messages
+from setup import ui
 
 
 def update_status(sink, data, count):

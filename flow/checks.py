@@ -12,8 +12,8 @@ which was easy to forget to look for.
 
 import pandas as pd
 
-from documate.setup import config
-from documate.setup import messages
+from setup import config
+from setup import messages
 
 
 class CheckFailed(Exception):

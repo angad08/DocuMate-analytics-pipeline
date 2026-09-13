@@ -28,7 +28,7 @@ Want a new version? Add one entry. No new file, no copied code.
 
 import os
 
-from documate.setup import config
+from setup import config
 
 
 # The two template files.

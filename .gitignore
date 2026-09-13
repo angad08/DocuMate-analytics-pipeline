@@ -4,7 +4,7 @@
 .env
 .env.local
 DocuMate_env
-documate.env
+env
 env.txt
 
 # Python cache
@@ -27,10 +27,9 @@ build/
 *.spec
 
 # Generated outputs.
-# What the code reads and writes lives in documate/files/ now, so the
-# generated documents are at documate/files/output/.
-documate/files/output/*
-!documate/files/output/.gitkeep
+# Generated documents are at files/output/.
+files/output/*
+!files/output/.gitkeep
 
 # The real birth register. Never commit it under any name - it is the
 # live consular data, not the synthetic demo workbook.

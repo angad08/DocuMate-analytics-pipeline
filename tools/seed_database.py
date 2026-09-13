@@ -5,9 +5,9 @@ This was src/loadData.py. It isn't part of making documents - it's the
 setup tool for the database that Z and O read from. It stays a separate
 tool because it's the only thing here that writes new records.
 
-    python -m documate.tools.seed_database --insert
-    python -m documate.tools.seed_database --select
-    python -m documate.tools.seed_database --insert --file files/data/test_data/Test_Insert_data.xlsx
+    python -m tools.seed_database --insert
+    python -m tools.seed_database --select
+    python -m tools.seed_database --insert --file files/data/test_data/Test_Insert_data.xlsx
 
 Connection details come from .env, same as everything else.
 """
@@ -17,8 +17,8 @@ import os
 
 import pandas as pd
 
-from documate.setup import config
-from documate.sources.queries import PENDING_APPLICANTS
+from setup import config
+from sources.queries import PENDING_APPLICANTS
 
 
 DEFAULT_SHEET = "Sheet1"
@@ -178,7 +178,7 @@ def select_data(cursor):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="documate.tools.seed_database",
+        prog="tools.seed_database",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

@@ -1,7 +1,7 @@
 # How the old scripts map onto the new ones
 
 The project used to be five scripts in `src/`, 3,396 lines, each one a full
-copy of the whole pipeline. `documate/` is the same behaviour with the copies
+copy of the whole pipeline. `` is the same behaviour with the copies
 removed.
 
 ---
@@ -150,10 +150,10 @@ at the method.
 ## What was checked
 
 ```
-python -m pytest documate/tests -q     # 39 passed
+python -m pytest tests -q     # 39 passed
 ```
 
-Beyond that, checked against the real `documate/files/data/DocuMate_DataFrame.xlsx`
+Beyond that, checked against the real `files/data/DocuMate_DataFrame.xlsx`
 (1,440 rows, 121 pending):
 
 - **Same records.** The original v3 filtering, date formatting and sorting was

@@ -13,8 +13,8 @@ from datetime import datetime
 import pandas as pd
 from openpyxl import load_workbook
 
-from documate.setup import config
-from documate.setup import messages
+from setup import config
+from setup import messages
 
 
 class ExcelSource:

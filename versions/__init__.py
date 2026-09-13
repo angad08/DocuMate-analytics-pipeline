@@ -9,14 +9,14 @@ source or engine means changing it here once, and then every version can
 use it.
 """
 
-from documate.setup import config
-from documate.engines.mailmerge_engine import MailMergeEngine
-from documate.engines.docxtpl_engine import DocxtplEngine
-from documate.flow.pipeline import Pipeline
-from documate.sources.excel import ExcelSource
-from documate.versions.registry import VERSIONS
-from documate.versions.registry import Version
-from documate.versions.registry import get
+from setup import config
+from engines.mailmerge_engine import MailMergeEngine
+from engines.docxtpl_engine import DocxtplEngine
+from flow.pipeline import Pipeline
+from sources.excel import ExcelSource
+from versions.registry import VERSIONS
+from versions.registry import Version
+from versions.registry import get
 
 
 def build_source(version):
@@ -27,7 +27,7 @@ def build_source(version):
 
     if version.source == "postgres":
         # Imported here so the Excel versions don't need psycopg2 installed.
-        from documate.sources.postgres import DatabaseSource
+        from sources.postgres import DatabaseSource
         return DatabaseSource(config.database_settings())
 
     raise ValueError(

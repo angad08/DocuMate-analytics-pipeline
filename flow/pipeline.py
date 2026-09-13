@@ -18,12 +18,12 @@ get plugged in when the version starts.
 import os
 import time
 
-from documate.setup import messages
-from documate.setup import ui
-from documate.flow import checks
-from documate.engines.output_paths import build_output_name
-from documate.flow.update_status import update_status
-from documate.flow.checks import CheckFailed
+from setup import messages
+from setup import ui
+from flow import checks
+from engines.output_paths import build_output_name
+from flow.update_status import update_status
+from flow.checks import CheckFailed
 
 
 class Pipeline:

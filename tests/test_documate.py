@@ -14,22 +14,22 @@ import sys
 import pandas as pd
 import pytest
 
-# Let the tests import documate without installing anything.
-# Walk up from this file until we find the folder that contains documate/,
-# so these tests work whether they live at tests/ or documate/tests/.
+# Let the tests import the project without installing anything.
+# Walk up from this file until we find the folder that contains ,
+# so these tests work whether they live at tests/ or tests/.
 _here = os.path.dirname(os.path.abspath(__file__))
 while _here != os.path.dirname(_here):
-    if os.path.isdir(os.path.join(_here, "documate")):
+    if os.path.isdir(os.path.join(_here, "flow")):
         break
     _here = os.path.dirname(_here)
 sys.path.insert(0, _here)
 
-from documate.flow import checks
-from documate.engines.output_paths import build_output_name
-from documate.engines.mailmerge_engine import plan_batches
-from documate.sources.postgres import build_record
-from documate.flow.checks import CheckFailed
-from documate.versions import registry
+from flow import checks
+from engines.output_paths import build_output_name
+from engines.mailmerge_engine import plan_batches
+from sources.postgres import build_record
+from flow.checks import CheckFailed
+from versions import registry
 
 
 def sheet(**changes):

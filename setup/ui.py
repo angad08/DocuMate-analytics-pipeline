@@ -12,7 +12,7 @@ instead and the program carries on exactly the same.
 
 import sys
 
-from documate.setup import config
+from setup import config
 
 TITLE = "DocuMate"
 

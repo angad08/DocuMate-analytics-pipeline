@@ -11,5 +11,5 @@ mark_printed() writes the statuses back. Because they both hand back the
 same shape, everything after them is shared.
 """
 
-from documate.sources.excel import ExcelSource
-from documate.sources.postgres import DatabaseSource
+from sources.excel import ExcelSource
+from sources.postgres import DatabaseSource

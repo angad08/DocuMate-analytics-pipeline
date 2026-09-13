@@ -14,5 +14,5 @@ output paths and temp cleanup, word_com.py for the Word constants.
 render.py is the worker that fills one template, used by docxtpl_engine.py only.
 """
 
-from documate.engines.mailmerge_engine import MailMergeEngine
-from documate.engines.docxtpl_engine import DocxtplEngine
+from engines.mailmerge_engine import MailMergeEngine
+from engines.docxtpl_engine import DocxtplEngine
