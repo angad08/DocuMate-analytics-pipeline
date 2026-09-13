@@ -1,6 +1,11 @@
-# Secrets - never commit the real database password
+# Secrets - never commit the real database password.
+# Several names are listed because config.py accepts any of them, and a
+# name that isn't listed here would get committed.
 .env
 .env.local
+DocuMate_env
+documate.env
+env.txt
 
 # Python cache
 __pycache__/
@@ -21,9 +26,26 @@ build/
 *.exe
 *.spec
 
-# Generated outputs
-output_files/*
-!output_files/.gitkeep
+# Generated outputs.
+# What the code reads and writes lives in documate/files/ now, so the
+# generated documents are at documate/files/output/.
+documate/files/output/*
+!documate/files/output/.gitkeep
+
+# The real birth register. Never commit it under any name - it is the
+# live consular data, not the synthetic demo workbook.
+BIRTH_REGISTRATION*.xlsx
+
+# Power BI files embed a full copy of their data model, so a .pbix can
+# carry the whole applicant table inside it even when the report only
+# shows counts.
+*.pbix
+
+# Temp files the Mail Merge engine writes while Word is running.
+# Cleaned up automatically, but listed in case a run is interrupted -
+# they contain real personal data.
+__temp_merge_source.csv
+__temp_batch_*.docx
 
 # OS files
 Thumbs.db
