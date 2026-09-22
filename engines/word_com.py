@@ -1,39 +1,50 @@
 """
-Word's magic numbers, given names, plus a safe way to import pywin32.
+Word COM constants, and a helper to load pywin32.
 
-Word's COM interface takes numbers for everything. 0 means "send to a new
-document", 7 means "section break, next page". Giving them names means
-mailmerge.py reads as words instead of digits.
+Word's COM interface uses numbers for its options (for example 16 means
+"save as .docx"). The constants below give those numbers readable names,
+so the engine code says FORMAT_DOCX instead of 16.
+
+The values come from Word's own enumerations (WdSaveFormat,
+WdExportFormat, WdBreakType and so on) in the Word VBA reference.
 """
 
-# Where the merge result goes: a new document.
+# MailMerge.Destination: put the merge result in a new document.
 SEND_TO_NEW_DOCUMENT = 0
 
-# When closing a document: don't save.
+# Document.Close: close without saving.
 DO_NOT_SAVE_CHANGES = 0
 
-# Save format: .docx
+# SaveAs2 FileFormat: Word .docx.
 FORMAT_DOCX = 16
 
-# Break type: section break, starts on the next page.
+# ExportAsFixedFormat ExportFormat: PDF.
+EXPORT_PDF = 17
+
+# ExportAsFixedFormat OptimizeFor: print quality (full resolution).
+OPTIMIZE_FOR_PRINT = 0
+
+# InsertBreak: section break that starts on the next page.
 SECTION_BREAK_NEXT_PAGE = 7
 
-# Mail merge document type: form letters.
+# MailMerge.MainDocumentType: form letters (one page per record).
 FORM_LETTERS = 0
 
-# Macro security: force-disable. This also stops Word asking you to confirm
-# the data source, which would otherwise freeze an unattended run.
+# AutomationSecurity: disable all macros. This also stops Word from asking
+# to confirm the data source, which would pause an unattended run.
 DISABLE_MACROS = 3
 
 
 def load_word():
     """
-    Load pywin32 and hand back what we need, or explain why we can't.
+    Import pywin32 and return (pythoncom, win32com.client).
 
-    The old scripts did "import win32com" at the top of the file and called
-    sys.exit(1) if it failed. That meant the whole file couldn't even be
-    opened on a non-Windows machine, and simply importing it could kill the
-    program. We import it here instead, only when Mail Merge actually runs.
+    The import happens here, when Word is first needed, and not at the top
+    of the file. That keeps the rest of DocuMate importable on machines
+    without pywin32, for example when running the tests or the docxtpl
+    versions.
+
+    Raises RuntimeError with install instructions if pywin32 is missing.
     """
     try:
         import pythoncom

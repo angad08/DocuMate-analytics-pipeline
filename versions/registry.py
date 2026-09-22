@@ -1,29 +1,37 @@
 """
-The list of versions. THIS is the file you edit.
+The list of DocuMate versions, and the settings for each one.
 
-Every version of DocuMate is one entry below. It says which data source to
-read from, which engine makes the Word file, and a few settings. There is
-no code for each version - the parts are shared and the differences are
-just these settings.
+This is the file to edit when you want to change how a version behaves or
+add a new one. Each version is one Version(...) entry below. There is no
+separate code per version: every version uses the same shared parts, and
+these settings choose which parts and how they are configured.
 
-Want a new version? Add one entry. No new file, no copied code.
+To add a version, copy an existing entry, give it a new key, and change the
+settings. It is then available as  python main.py <key>.
 
-    key               short name you type on the command line
-    label             how the version calls itself in messages
-    source            "excel" or "postgres"
-    engine            "docxtpl" (Python fills it) or "mailmerge" (Word fills it)
-    template          which template file in templates\\
-    output_prefix     start of the output filename
-    check_records     run the v3 checks
-                      (the database versions filter in SQL, so they don't)
-    date_columns      which columns to turn into dd/mm/yyyy
-                      (the database versions do that when reading, so none)
-    batch_size        mailmerge only: records per run of Word.
-                      None means one single run.
-    max_workers       docxtpl only: how many records to fill at once
-    timestamp_format  what gets stuck on the end of the filename
+Settings
+--------
+    key               name you type on the command line, e.g. "x"
+    label             name shown in messages
+    source            "excel" or "database"
+                      ("database" uses Azure SQL or PostgreSQL, whichever
+                       DOCUMATE_DB_BACKEND in .env selects)
+    engine            "docxtpl" (Python fills the template) or
+                      "mailmerge" (Word fills it)
+    template          template file name in files/templates
+    output_prefix     start of the output file name
+    check_records     run the record checks in flow/checks.py
+                      (off for database versions, which filter in SQL)
+    date_columns      columns to format as dd/mm/yyyy
+                      (empty for database versions, which format on read)
+    batch_size        mailmerge only: records per Word merge;
+                      None merges everything at once
+    max_workers       docxtpl only: records filled at the same time
+    timestamp_format  date/time added to the end of the output file name
     poll              keep checking for new records by default
-    poll_interval     how many seconds between checks
+    poll_interval     seconds between checks when polling
+    to_pdf            also save a PDF copy of the merged Word file, with
+                      the same name in the same folder. Needs Word.
 """
 
 import os
@@ -31,13 +39,14 @@ import os
 from setup import config
 
 
-# The two template files.
+# Template files in files/templates. The _MM file is for the Mail Merge
+# engine; the other uses docxtpl {{ placeholders }}.
 TEMPLATE_DOCXTPL = "DOCUMENT_TEMPLATE_FILE.docx"
 TEMPLATE_MAILMERGE = "DOCUMENT_TEMPLATE_FILE_MM.docx"
 
 
 class Version:
-    """One version of DocuMate: which parts it uses, and its settings."""
+    """One DocuMate version: which source and engine it uses, and its settings."""
 
     def __init__(self,
                  key,
@@ -53,6 +62,7 @@ class Version:
                  timestamp_format="%d%m%Y",
                  poll=False,
                  poll_interval=300,
+                 to_pdf=False,
                  notes=""):
 
         self.key = key
@@ -68,12 +78,15 @@ class Version:
         self.timestamp_format = timestamp_format
         self.poll = poll
         self.poll_interval = poll_interval
+        self.to_pdf = to_pdf
         self.notes = notes
 
     def template_path(self):
+        """Full path to this version's template file."""
         return os.path.join(config.templates_folder(), self.template)
 
     def output_folder(self):
+        """Folder the output files are saved in."""
         return config.output_folder()
 
 
@@ -84,9 +97,8 @@ class Version:
 VERSIONS = {}
 
 
-# v3 - the one that went into production in 2025.
-# First version with the checks, one merged file, and writing statuses back.
-# Everything after this is the same thing with a different source or engine.
+# v3: Excel + docxtpl. The production version.
+# Checks the records, merges them into one file, and marks them PRINTED.
 VERSIONS["v3"] = Version(
     key="v3",
     label="v3",
@@ -97,12 +109,13 @@ VERSIONS["v3"] = Version(
     check_records=True,
     date_columns=["Registration_date"],
     max_workers=10,
+    to_pdf=True,
     notes="Excel + docxtpl. The production version.",
 )
 
 
-# X - same Excel front end as v3, but Word does the work instead of docxtpl.
-# Batching is what stopped Word hanging on 1,440 records.
+# X: Excel + Word Mail Merge, 250 records per merge.
+# Batching keeps Word responsive on large runs.
 VERSIONS["x"] = Version(
     key="x",
     label="X",
@@ -113,12 +126,13 @@ VERSIONS["x"] = Version(
     check_records=True,
     date_columns=["Registration_date"],
     batch_size=250,
+    to_pdf=True,
     notes="Excel + Word Mail Merge, 250 at a time. Fastest version.",
 )
 
 
-# Y - X with batching switched off. Slightly quicker on small runs,
-# hangs on big ones, which is exactly why X exists.
+# Y: the same as X but merges everything in one go (no batching).
+# Fine for small runs; Word can stop responding on large ones.
 VERSIONS["y"] = Version(
     key="y",
     label="Y",
@@ -129,17 +143,18 @@ VERSIONS["y"] = Version(
     check_records=True,
     date_columns=["Registration_date"],
     batch_size=None,
+    to_pdf=True,
     notes="Excel + Word Mail Merge, all in one go. Small runs only.",
 )
 
 
-# Z - v3's engine, reading from PostgreSQL instead of Excel.
-# The filtering moves into the SQL, so the checks are off and the dates are
-# formatted while reading.
+# Z: database + docxtpl.
+# The SQL only returns pending records and the dates are formatted on read,
+# so checks are off and date_columns is empty. Polls every 30 seconds.
 VERSIONS["z"] = Version(
     key="z",
     label="Z",
-    source="postgres",
+    source="database",
     engine="docxtpl",
     template=TEMPLATE_DOCXTPL,
     output_prefix="DocuMateZ",
@@ -149,15 +164,16 @@ VERSIONS["z"] = Version(
     timestamp_format="%d%m%Y_%H%M%S",
     poll=True,
     poll_interval=30,
-    notes="PostgreSQL + docxtpl, keeps checking for new records.",
+    to_pdf=True,
+    notes="Database + docxtpl, keeps checking for new records.",
 )
 
 
-# O - the last combination: Z's source with X's engine.
+# O: database + Word Mail Merge, 100 records per merge. Polls every 30 seconds.
 VERSIONS["o"] = Version(
     key="o",
     label="O",
-    source="postgres",
+    source="database",
     engine="mailmerge",
     template=TEMPLATE_MAILMERGE,
     output_prefix="DocuMateO",
@@ -167,12 +183,17 @@ VERSIONS["o"] = Version(
     timestamp_format="%d%m%Y_%H%M%S",
     poll=True,
     poll_interval=30,
-    notes="PostgreSQL + Word Mail Merge, 100 at a time.",
+    to_pdf=True,
+    notes="Database + Word Mail Merge, 100 at a time.",
 )
 
 
 def get(key):
-    """Find a version by name, listing the real ones if you mistype."""
+    """
+    Return the version with this key (case-insensitive).
+
+    Stops with a message listing the valid keys if it does not exist.
+    """
     key = key.lower()
 
     if key not in VERSIONS:

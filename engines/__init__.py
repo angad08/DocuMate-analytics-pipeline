@@ -1,17 +1,20 @@
 """
-How the Word file gets made.
+Engines: turn a list of records into one merged Word file.
 
-Two files, two engines:
+There are two engines. A version picks one in versions/registry.py.
 
-    docxtpl_engine.py    docxtpl - Python fills the template itself  -> v3, Z
-    mailmerge_engine.py  Word does it over COM                       -> X, Y, O
+    docxtpl_engine.py    Python fills the template (docxtpl)      v3, Z
+    mailmerge_engine.py  Word fills it with Mail Merge (COM)      X, Y, O
 
-Both take the same thing (a list of records) and do the same thing (save
-one merged .docx), so the rest of the code doesn't care which one is in use.
+Both have the same method, generate(records, output_path), and both save
+one merged .docx, so the pipeline can use either without knowing which.
 
-The other two files are small helpers both engines share: files.py for
-output paths and temp cleanup, word_com.py for the Word constants.
-render.py is the worker that fills one template, used by docxtpl_engine.py only.
+Helper modules:
+
+    render.py        fills one record into the template (docxtpl only)
+    output_paths.py  builds output filenames and cleans up temp files
+    word_com.py      named constants for Word's COM options
+    pdf.py           saves a PDF copy of the merged .docx (to_pdf=True)
 """
 
 from engines.mailmerge_engine import MailMergeEngine

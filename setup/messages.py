@@ -28,6 +28,11 @@ MERGE_DONE = "\nDocuMate : Generated and merged {count} documents"
 MERGE_TIME = "DocuMate : {engine} finished in {seconds:.2f} seconds.\n"
 NOTHING_TO_MERGE = "DocuMate : No records found for merging."
 
+# --- PDF copy --------------------------------------------------------------
+PDF_START = "\nDocuMate : Exporting a PDF copy of the merged document..."
+PDF_SAVED = "DocuMate : PDF saved in {seconds:.2f} seconds:\n{path}"
+PDF_FAILED = "DocuMate : PDF export failed, the Word file is still saved - {error}"
+
 # --- Mail Merge only -------------------------------------------------------
 MM_SOURCE_BUILT = "DocuMate : Built CSV merge source - {count} records, 1 to {count}"
 MM_STARTING = "DocuMate : Starting Word Mail Merge..."

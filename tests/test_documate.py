@@ -1,9 +1,10 @@
 """
-Tests for the parts that actually make decisions.
+Tests for DocuMate's logic: checks, sorting, file names, batching, the
+version list, database settings and SQL, and the PDF settings.
 
-Word and the database aren't tested here - they need Windows and a live
-connection. Everything they sit on top of is, which is the whole reason
-that logic got pulled out of the engines.
+Word and a live database are not needed. The tests cover the code that
+decides what Word and the database are asked to do, not Word or the
+database themselves.
 
 Run them with:   python -m pytest tests -q
 """
@@ -15,8 +16,8 @@ import pandas as pd
 import pytest
 
 # Let the tests import the project without installing anything.
-# Walk up from this file until we find the folder that contains ,
-# so these tests work whether they live at tests/ or tests/.
+# Walk up from this file to the folder that contains flow/ (the project
+# root) and add it to the import path.
 _here = os.path.dirname(os.path.abspath(__file__))
 while _here != os.path.dirname(_here):
     if os.path.isdir(os.path.join(_here, "flow")):
@@ -26,6 +27,7 @@ sys.path.insert(0, _here)
 
 from flow import checks
 from engines.output_paths import build_output_name
+from engines.pdf import pdf_path_for
 from engines.mailmerge_engine import plan_batches
 from sources.postgres import build_record
 from flow.checks import CheckFailed
@@ -253,14 +255,14 @@ def test_each_version_key_matches_its_entry():
 
 def test_every_version_names_a_real_source_and_engine():
     for version in registry.VERSIONS.values():
-        assert version.source in ["excel", "postgres"]
+        assert version.source in ["excel", "database"]
         assert version.engine in ["docxtpl", "mailmerge"]
 
 
 def test_the_database_versions_have_checks_turned_off():
     """They filter in SQL, so there is nothing left for the checks to do."""
     for version in registry.VERSIONS.values():
-        if version.source == "postgres":
+        if version.source == "database":
             assert version.check_records is False
 
 
@@ -277,6 +279,130 @@ def test_mail_merge_versions_use_the_mail_merge_template():
             assert version.template.endswith("_MM.docx")
         else:
             assert not version.template.endswith("_MM.docx")
+
+
+# ---------------------------------------------------------------------------
+# The two database backends
+#
+# No database connection is made. These tests cover how the backend is
+# chosen from .env, the settings each backend receives, and the SQL each
+# one builds.
+# ---------------------------------------------------------------------------
+
+import datetime
+
+from setup import config
+from sources import azuresql
+from sources import queries_postgres
+from sources import queries_tsql
+
+
+@pytest.fixture
+def no_backend_set(monkeypatch):
+    """Clear DOCUMATE_DB_BACKEND and skip loading .env, so defaults apply."""
+    monkeypatch.delenv("DOCUMATE_DB_BACKEND", raising=False)
+    monkeypatch.setattr(config, "load_environment", lambda: None)
+
+
+def test_the_default_backend_is_one_we_support(no_backend_set):
+    assert config.database_backend() in config.DATABASE_BACKENDS
+
+
+def test_the_backend_can_be_switched_from_the_environment(no_backend_set, monkeypatch):
+    for name in config.DATABASE_BACKENDS:
+        monkeypatch.setenv("DOCUMATE_DB_BACKEND", name.upper() + "  ")
+        assert config.database_backend() == name
+
+
+def test_an_unknown_backend_is_refused_by_name(no_backend_set, monkeypatch):
+    monkeypatch.setenv("DOCUMATE_DB_BACKEND", "mysql")
+
+    with pytest.raises(ValueError) as failure:
+        config.database_backend()
+
+    assert "mysql" in str(failure.value)
+
+
+def test_each_backend_gets_its_own_default_port(no_backend_set, monkeypatch):
+    monkeypatch.delenv("DOCUMATE_DB_PORT", raising=False)
+    for key in ["HOST", "NAME", "USER", "PASSWORD"]:
+        monkeypatch.setenv("DOCUMATE_DB_" + key, "x")
+
+    for name, backend in config.DATABASE_BACKENDS.items():
+        monkeypatch.setenv("DOCUMATE_DB_BACKEND", name)
+        assert config.database_settings()["port"] == int(backend["port"])
+
+
+def test_sslmode_only_goes_to_postgres(no_backend_set, monkeypatch):
+    """sslmode is a psycopg2 option, so only the PostgreSQL settings include it."""
+    for key in ["HOST", "NAME", "USER", "PASSWORD"]:
+        monkeypatch.setenv("DOCUMATE_DB_" + key, "x")
+
+    monkeypatch.setenv("DOCUMATE_DB_BACKEND", "postgres")
+    assert "sslmode" in config.database_settings()
+
+    monkeypatch.setenv("DOCUMATE_DB_BACKEND", "azuresql")
+    assert "sslmode" not in config.database_settings()
+
+
+def test_both_dialects_offer_the_same_names():
+    """sources/database.py uses these names from whichever queries module is selected."""
+    for name in ["PENDING_APPLICANTS", "DATE_ISSUED_EXISTS",
+                 "ADD_DATE_ISSUED_COLUMN", "mark_printed_sql",
+                 "mark_printed_params"]:
+        assert hasattr(queries_postgres, name), "postgres is missing " + name
+        assert hasattr(queries_tsql, name), "tsql is missing " + name
+
+
+def test_each_dialect_builds_an_update_its_own_driver_can_run():
+    today = datetime.date(2026, 1, 2)
+    serials = [1, 2, 3]
+
+    # PostgreSQL: one array parameter, so two placeholders whatever the size.
+    pg_sql = queries_postgres.mark_printed_sql(len(serials))
+    assert pg_sql.count("%s") == 2
+    assert queries_postgres.mark_printed_params(today, serials) == (today, serials)
+
+    # Azure SQL: one ? per serial, plus one for the date.
+    tsql = queries_tsql.mark_printed_sql(len(serials))
+    assert tsql.count("?") == len(serials) + 1
+    assert "IN (?, ?, ?)" in tsql
+    assert queries_tsql.mark_printed_params(today, serials) == [today] + serials
+
+
+def test_tsql_refuses_a_batch_over_the_parameter_limit():
+    """An empty batch, or one over MAX_SERIALS_PER_UPDATE, raises a clear error."""
+    with pytest.raises(ValueError):
+        queries_tsql.mark_printed_sql(0)
+
+    with pytest.raises(ValueError):
+        queries_tsql.mark_printed_sql(queries_tsql.MAX_SERIALS_PER_UPDATE + 1)
+
+
+def test_an_odbc_password_with_punctuation_survives():
+    """A password containing ; = and } is wrapped in braces and passed intact."""
+    settings = {
+        "host": "srv.database.windows.net", "database": "DocuMate",
+        "user": "angadadmin", "password": "p;a=ss}word", "port": 1433,
+    }
+
+    built = azuresql.connection_string(settings, "ODBC Driver 18 for SQL Server")
+
+    assert "PWD={p;a=ss}}word};" in built
+    assert "Encrypt=yes" in built
+    assert "sslmode" not in built
+
+
+def test_no_odbc_driver_says_how_to_get_one():
+    class NoDrivers:
+        @staticmethod
+        def drivers():
+            return ["Microsoft Access Driver (*.mdb, *.accdb)"]
+
+    with pytest.raises(RuntimeError) as failure:
+        azuresql.find_driver(NoDrivers)
+
+    assert "ODBC Driver 18 for SQL Server" in str(failure.value)
 
 
 def test_no_two_versions_share_an_output_name():
@@ -317,3 +443,33 @@ def test_each_version_produces_its_own_filename():
         )))
 
     assert len(names) == len(registry.VERSIONS)
+
+
+# ---------------------------------------------------------------------------
+# PDF copy
+# ---------------------------------------------------------------------------
+
+def test_the_pdf_sits_next_to_the_word_file_with_the_same_name():
+    docx = os.path.join("out", "DocuMateX_BIRTH_REGISTRATION_13092026.docx")
+    pdf = pdf_path_for(docx)
+
+    assert os.path.dirname(pdf) == os.path.abspath("out")
+    assert os.path.basename(pdf) == "DocuMateX_BIRTH_REGISTRATION_13092026.pdf"
+
+
+def test_every_version_has_a_yes_or_no_pdf_setting():
+    for version in registry.VERSIONS.values():
+        assert version.to_pdf in (True, False)
+
+
+def test_pdf_is_off_unless_a_version_asks_for_it():
+    version = registry.Version("t", "T", "excel", "docxtpl", "T.docx", "T")
+    assert version.to_pdf is False
+
+
+def test_both_engines_are_handed_the_pdf_setting():
+    """build_engine passes each version's to_pdf setting to its engine."""
+    import versions
+
+    for version in registry.VERSIONS.values():
+        assert versions.build_engine(version).to_pdf == version.to_pdf
