@@ -1,24 +1,36 @@
 """
-Paths and settings.
+Paths and settings for DocuMate.
 
-Everything that used to sit hardcoded at the bottom of each script lives
-here instead. Passwords and database hosts come from the .env file, never
-from the code.
+Everything DocuMate needs to find is decided here: the project folder, the
+.env settings file, the files/ folders, the Excel workbook, and the database
+connection details.
+
+Secrets such as the database password are read from .env (see .env.example)
+and never written in the code.
+
+Folder layout
+-------------
+    <project root>/
+        main.py
+        .env
+        files/
+            data/        the Excel workbook
+            templates/   the Word templates
+            output/      generated .docx and .pdf files
 """
 
 import os
+import re
 import sys
 
 
 def project_root():
     """
-    Find the project folder.
+    Return the project folder.
 
-    Three cases:
-      - DOCUMATE_ROOT is set  ->  use that (handy for testing)
-      - running as a .exe     ->  the exe sits in dist\\, so go up one
-      - running as a script   ->  this file is setup\\config.py,
-                                  so go up one
+      - DOCUMATE_ROOT is set  ->  that folder (useful for testing)
+      - running as an .exe    ->  the folder above dist\\, where the exe sits
+      - running as a script   ->  the folder above setup\\, where this file is
     """
     override = os.getenv("DOCUMATE_ROOT")
     if override:
@@ -30,11 +42,11 @@ def project_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-# The settings file. ".env" is the usual name, but Windows Explorer makes
-# it awkward to create a file whose name starts with a dot, so anything
-# ending in ".env" works too - DocuMate_env.env, env, and so on.
-# ".env.example" is skipped on purpose: it is the blank template, and
-# picking it up would look like the settings loaded when they hadn't.
+# Names accepted for the settings file, checked in the project root.
+# ".env" is the usual name. Windows Explorer makes it awkward to create a
+# file starting with a dot, so a few other names work too, as does any file
+# ending in ".env" (e.g. DocuMate_env.env).
+# ".env.example" is always skipped: it is the blank template.
 ENV_FILENAMES = [".env", "DocuMate_env", "env.txt"]
 ENV_SUFFIX = ".env"
 ENV_TEMPLATE = ".env.example"
@@ -42,10 +54,9 @@ ENV_TEMPLATE = ".env.example"
 
 def env_file():
     """
-    Find the settings file, or return None if there isn't one.
+    Return the path of the settings file, or None if there isn't one.
 
-    Looks in the project root, alongside main.py. Exact names first, then any
-    file ending in .env.
+    Checks ENV_FILENAMES in order first, then any other file ending in .env.
     """
     root = project_root()
 
@@ -71,7 +82,12 @@ def env_file():
 
 
 def load_environment():
-    """Read the settings file if python-dotenv is installed. Optional."""
+    """
+    Load the settings file into the environment, if python-dotenv is installed.
+
+    Variables already set in the environment are not overwritten. Without
+    python-dotenv, settings are read from the real environment only.
+    """
     try:
         from dotenv import load_dotenv
     except ImportError:
@@ -83,21 +99,16 @@ def load_environment():
 
 
 def package_folder():
-    """
-    The project root. The package was flattened so all runtime folders sit
-    directly beside main.py.
-    """
+    """The folder holding main.py and files/. Currently the project root."""
     return project_root()
 
 
 def files_folder():
     """
-    What the code reads and writes.
+    The files/ folder, holding data/, templates/ and output/.
 
-    data, templates and output live in here, together and away from the
-    code. If you ever move them back out to the project root, change this
-    one function to use project_root() instead - it is the only place that
-    location is decided.
+    This is the only place the location of files/ is set. Change it here
+    to move all three folders at once.
     """
     return os.path.join(package_folder(), "files")
 
@@ -118,11 +129,14 @@ def output_folder():
 # Excel settings  (used by v3, X, Y)
 # ---------------------------------------------------------------------------
 
+# Default workbook (in files/data) and sheet. Override with
+# DOCUMATE_EXCEL_PATH and DOCUMATE_SHEET_NAME in .env.
 EXCEL_FILENAME = "DocuMate_DataFrame.xlsx"
 SHEET_NAME = "DocuMateSRC"
 
 
 def excel_path():
+    """Full path to the workbook: DOCUMATE_EXCEL_PATH, or EXCEL_FILENAME in files/data."""
     load_environment()
     override = os.getenv("DOCUMATE_EXCEL_PATH")
     if override:
@@ -131,6 +145,7 @@ def excel_path():
 
 
 def sheet_name():
+    """The sheet to read: DOCUMATE_SHEET_NAME, or SHEET_NAME."""
     load_environment()
     return os.getenv("DOCUMATE_SHEET_NAME", SHEET_NAME)
 
@@ -139,14 +154,89 @@ def sheet_name():
 # Database settings  (used by Z, O)
 # ---------------------------------------------------------------------------
 
-def database_settings():
-    """
-    Build the connection details for psycopg2, read from .env.
+# The database backends Z and O can use.
+#   port     default port, used when DOCUMATE_DB_PORT is not set
+#   module   the module holding the source class
+#   cls      the source class to create
+DATABASE_BACKENDS = {
+    "azuresql": {"port": "1433", "module": "sources.azuresql", "cls": "AzureSqlSource"},
+    "postgres": {"port": "5432", "module": "sources.postgres", "cls": "PostgresSource"},
+}
 
-    If anything is missing we stop right here and name the variable,
-    instead of failing later with a confusing connection error.
+DEFAULT_BACKEND = "azuresql"
+
+
+def database_backend():
+    """
+    Return the selected backend, "azuresql" or "postgres", from DOCUMATE_DB_BACKEND.
+
+    The other connection settings (host, name, user, password) have the
+    same names for both backends, so switching only needs this one value
+    changed in .env.
+
+    Raises ValueError for an unknown name.
     """
     load_environment()
+
+    name = os.getenv("DOCUMATE_DB_BACKEND", DEFAULT_BACKEND).strip().lower()
+
+    if name not in DATABASE_BACKENDS:
+        raise ValueError(
+            "DOCUMATE_DB_BACKEND is '" + name + "', which is not a database "
+            "DocuMate knows. Use one of: " + ", ".join(sorted(DATABASE_BACKENDS))
+        )
+
+    return name
+
+
+# Allowed schema names: letters, digits and underscores, not starting with
+# a digit. The schema is written into the SQL text (databases do not accept
+# a schema name as a query parameter), so it is checked against this
+# pattern first to rule out SQL injection through .env.
+SCHEMA_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def database_schema():
+    """
+    Return the schema holding the DocuMate tables, from DOCUMATE_DB_SCHEMA.
+
+    Returns "" when it is not set, which means the connection's default
+    schema: dbo on Azure SQL, public on PostgreSQL.
+
+    Raises ValueError if the name is not a plain identifier.
+    """
+    load_environment()
+
+    name = os.getenv("DOCUMATE_DB_SCHEMA", "").strip()
+
+    if not name:
+        return ""
+
+    if not SCHEMA_NAME.match(name):
+        raise ValueError(
+            "DOCUMATE_DB_SCHEMA is '" + name + "', which is not a plain "
+            "schema name. Use letters, digits and underscores only, starting "
+            "with a letter or underscore - for example: documate"
+        )
+
+    return name
+
+
+def database_settings():
+    """
+    Return the database connection details from .env as a dict.
+
+        host, database, user, password   required
+        port                             DOCUMATE_DB_PORT, or the backend's default
+        sslmode                          PostgreSQL only, default "require"
+
+    The keys match psycopg2.connect()'s keyword arguments. The Azure SQL
+    backend turns the same dict into an ODBC connection string.
+
+    Raises ValueError naming any required setting that is missing.
+    """
+    load_environment()
+    backend = database_backend()
 
     settings = {
         "host": os.getenv("DOCUMATE_DB_HOST", ""),
@@ -173,8 +263,15 @@ def database_settings():
             + ", ".join(missing)
         )
 
-    settings["port"] = int(os.getenv("DOCUMATE_DB_PORT", "5432"))
-    settings["sslmode"] = os.getenv("DOCUMATE_DB_SSLMODE", "require")
+    settings["port"] = int(
+        os.getenv("DOCUMATE_DB_PORT", DATABASE_BACKENDS[backend]["port"])
+    )
+
+    # sslmode is a psycopg2 option, so it is only added for PostgreSQL.
+    # Azure SQL sets encryption in its connection string instead.
+    if backend == "postgres":
+        settings["sslmode"] = os.getenv("DOCUMATE_DB_SSLMODE", "require")
+
     return settings
 
 
@@ -185,18 +282,19 @@ def database_settings():
 # Columns allowed to be empty. Every other column must have a value.
 OPTIONAL_COLUMNS = ["STATUS", "Date_Printed", "Date_Issued"]
 
-# The column used to spot the same applicant entered twice.
+# The column used to find the same applicant entered twice.
 DUPLICATE_KEY = "File_Number"
 
-# The column we sort by, using the number in it ("123/2025" sorts as 123).
+# The column records are sorted by, using its number ("123/2025" sorts as 123).
 SORT_COLUMN = "Serial"
 
-# The status meaning "already done". Anything else counts as still pending.
+# The status that means a record is done. Any other value counts as pending.
 DONE_STATUS = "PRINTED"
 
-# Add the current year to every record so templates don't hardcode it.
-# v3 did this, the others didn't. Set to False to turn it off.
+# Add the current year to every record, so templates don't need it typed in.
+# Set to False to turn it off.
 INJECT_YEAR = True
 
-# Show Windows popup boxes. Turns itself off when not on Windows.
+# Show Windows popup messages. Set DOCUMATE_POPUPS=0 to print to the console
+# instead. Popups are turned off automatically when not on Windows.
 USE_POPUPS = os.getenv("DOCUMATE_POPUPS", "1") != "0"
