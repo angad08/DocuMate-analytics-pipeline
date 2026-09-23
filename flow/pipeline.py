@@ -71,11 +71,28 @@ class Pipeline:
 
             started = time.time()
 
-            self.make_documents(data)
-            update_text = update_status(self.sink, data, count)
+            successful, output_path = self.make_documents(data)
+            if not successful:
+                raise RuntimeError(messages.NOTHING_TO_MERGE)
+
+            printed_data = data.iloc[[number - 1 for number in successful]]
+            printed_count = len(printed_data)
+            failed_count = count - printed_count
+            try:
+                update_text = update_status(self.sink, printed_data, printed_count,
+                                            failed=failed_count)
+            except Exception as error:
+                ui.notify(messages.STATUS_UPDATE_FAILED.format(
+                    path=output_path,
+                    source=self.sink.label,
+                    reason=error,
+                ))
+                return
 
             ui.notify(messages.SUCCESS.format(
-                count=count,
+                count=printed_count,
+                failed_text=messages.RENDER_FAILURES.format(failed=failed_count)
+                            if failed_count else "",
                 update_text=update_text,
                 seconds=time.time() - started,
                 engine=self.engine.label,
@@ -148,13 +165,14 @@ class Pipeline:
             self.version.timestamp_format,
         )
 
-        self.engine.generate(records, output_path)
+        successful = self.engine.generate(records, output_path)
 
-        print(messages.MERGE_DONE.format(count=len(records)))
+        print(messages.MERGE_DONE.format(count=len(successful)))
         print(messages.MERGE_TIME.format(
             engine=self.engine.label,
             seconds=time.time() - started,
         ))
+        return successful, output_path
 
     # -- running more than once ---------------------------------------------
 

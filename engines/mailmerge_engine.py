@@ -135,12 +135,12 @@ class MailMergeEngine:
         records       list of dicts, one per certificate
         output_path   where to save the merged .docx
 
-        Returns output_path.
+        Returns the 1-based positions of records included in the document.
         """
 
         if not records:
             print(messages.NOTHING_TO_MERGE)
-            return output_path
+            return []
 
         pythoncom, win32com = word_com.load_word()
 
@@ -249,7 +249,7 @@ class MailMergeEngine:
                 except Exception as error:
                     print(messages.PDF_FAILED.format(error=error))
 
-            return output_path
+            return list(range(1, total + 1))
 
         except Exception as error:
             print(messages.MM_ERROR.format(error=error))

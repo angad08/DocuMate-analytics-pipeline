@@ -230,7 +230,7 @@ class DatabaseSource:
         to the database during the run is left pending for the next run.
 
         Each batch is committed on its own. If a batch fails, that batch is
-        rolled back and the error is printed; batches committed before it
+        rolled back and the error is raised; batches committed before it
         stay PRINTED.
         """
         if data is None or data.empty:
@@ -274,3 +274,4 @@ class DatabaseSource:
             # Undo any uncommitted changes from the failed batch.
             self.connection.rollback()
             print(messages.DB_UPDATE_FAILED.format(error=error))
+            raise

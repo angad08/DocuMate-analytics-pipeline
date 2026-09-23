@@ -44,13 +44,15 @@ MM_ERROR = "\nDocuMate : Mail Merge error - {error}"
 CLEANUP_FAILED = "DocuMate : Could not delete temp file: {path}"
 
 # --- Marking records as printed --------------------------------------------
-ASK_UPDATE = "DocuMate : Do you want me to mark the statuses as PRINTED for {count} records? (yes/no): "
+ASK_UPDATE = "DocuMate : Mark {count} as printed?{failed} (yes/no): "
+EXCEL_NO_SERIAL_COLUMN = "DocuMate : Serial column not found - cannot update Excel."
 UPDATING = "\nDocuMate : Updating {target} statuses...\n"
 UPDATE_SUFFIX = " and updated {target} in {seconds:.2f} seconds"
 EXCEL_UPDATED = "DocuMate : Sheet '{sheet}' updated successfully on {date} at {clock}."
-EXCEL_NO_STATUS_COLUMN = "DocuMate : STATUS column not found - skipping Excel update."
+EXCEL_NO_STATUS_COLUMN = "DocuMate : STATUS column not found - cannot update Excel."
 EXCEL_LOCKED = "DocuMate : Cannot update Excel while the file is open. Close it and retry."
 EXCEL_UPDATE_ERROR = "DocuMate : Error updating Excel - {error}"
+EXCEL_COUNT_WARNING = "DocuMate : Expected to mark {expected} rows but marked {marked} - check the Serial values."
 DB_UPDATED = "DocuMate : Database updated successfully ({count} records)."
 DB_UPDATE_FAILED = "DocuMate : Database update failed - {error}"
 NOTHING_TO_UPDATE = "DocuMate : No data to update."
@@ -79,8 +81,14 @@ SOURCE_MISSING = "Source file not found:\n{path}\n\n" + SIGNATURE
 SUCCESS = (
     "DocuMate : Mission accomplished!\n"
     "Generated {count} documents successfully{update_text}.\n"
+    "{failed_text}"
     "Total time taken: {seconds:.2f} seconds.\n\n"
     "{engine} + {source}.\n" + SIGNATURE
+)
+RENDER_FAILURES = "{failed} record(s) failed and were left pending - see the console for details.\n"
+STATUS_UPDATE_FAILED = (
+    "Documents were created and saved to {path}, but {source} was NOT updated: {reason}.\n"
+    "Close the file and mark these rows as PRINTED yourself, or they will be generated again on the next run."
 )
 FILE_LOCKED = (
     "I cannot start because a file I need is open.\n"

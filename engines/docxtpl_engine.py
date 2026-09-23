@@ -67,7 +67,7 @@ class DocxtplEngine:
         records       list of dicts, one per certificate
         output_path   where to save the merged .docx
 
-        Returns output_path.
+        Returns the 1-based positions of records included in the document.
 
         Order is kept: results are collected in the order the records were
         submitted, not the order the workers finish, so the output always
@@ -79,7 +79,7 @@ class DocxtplEngine:
 
         if not records:
             print(messages.NOTHING_TO_MERGE)
-            return output_path
+            return []
 
         total = len(records)
         print(messages.GENERATING.format(count=total))
@@ -87,6 +87,7 @@ class DocxtplEngine:
         merged = None       # the final document; every record is added to it
         composer = None     # docxcompose helper that appends documents
         failed = 0
+        successful = []
 
         with ProcessPoolExecutor(max_workers=self.max_workers) as workers:
 
@@ -104,7 +105,10 @@ class DocxtplEngine:
                 except Exception as error:
                     # Skip this record but keep going with the rest.
                     failed = failed + 1
-                    print("\nDocuMate : Error in record " + str(number) + " - " + str(error))
+                    record = records[number - 1]
+                    print("\nDocuMate : Error in record " + str(number)
+                          + " (Serial: " + str(record.get("Serial"))
+                          + ", Name: " + str(record.get("Name")) + ") - " + str(error))
                     continue
 
                 if merged is None:
@@ -116,11 +120,12 @@ class DocxtplEngine:
                     self.add_page_break(merged)
                     composer.append(document)
 
+                successful.append(number)
                 ui.progress(messages.RECORD_PROGRESS.format(done=number, total=total))
 
         if merged is None:
             print(messages.NOTHING_TO_MERGE)
-            return output_path
+            return []
 
         # Step 4: save the merged .docx.
         make_output_folder(os.path.dirname(output_path))
@@ -132,4 +137,4 @@ class DocxtplEngine:
         if self.to_pdf:
             convert_to_pdf(output_path)
 
-        return output_path
+        return successful

@@ -46,15 +46,7 @@ class ExcelSource:
 
     def mark_printed(self, data):
         """
-        Mark rows as PRINTED and stamp today's date.
-
-        Worth knowing: this updates every row in the sheet that isn't
-        already PRINTED - not only the rows we just processed. That is how
-        the original worked and changing it would be a real change, not a
-        tidy-up. It matters if someone adds a row to the sheet while the
-        documents are being made: that row gets marked printed without ever
-        getting a certificate. The database version doesn't have this
-        problem because it updates by Serial number.
+        Mark only rows whose Serial is in data as PRINTED, and stamp today's date.
         """
         try:
             workbook = load_workbook(self.path)
@@ -66,8 +58,9 @@ class ExcelSource:
                 columns[cell.value] = number
 
             if "STATUS" not in columns:
-                print(messages.EXCEL_NO_STATUS_COLUMN)
-                return
+                raise ValueError(messages.EXCEL_NO_STATUS_COLUMN)
+            if "Serial" not in columns:
+                raise ValueError(messages.EXCEL_NO_SERIAL_COLUMN)
 
             # Older sheets don't have Date_Printed, so add it.
             if "Date_Printed" not in columns:
@@ -77,9 +70,14 @@ class ExcelSource:
 
             status_column = columns["STATUS"]
             date_column = columns["Date_Printed"]
+            serial_column = columns["Serial"]
+            serials = set(data["Serial"])
             today = datetime.now().strftime("%d/%m/%Y")
+            marked = 0
 
             for row in range(2, sheet.max_row + 1):
+                if sheet.cell(row=row, column=serial_column).value not in serials:
+                    continue
                 status = sheet.cell(row=row, column=status_column).value
                 if status is None:
                     status = ""
@@ -89,8 +87,12 @@ class ExcelSource:
 
                 sheet.cell(row=row, column=status_column, value=config.DONE_STATUS)
                 sheet.cell(row=row, column=date_column, value=today)
+                marked = marked + 1
 
             workbook.save(self.path)
+
+            if marked != len(data):
+                print(messages.EXCEL_COUNT_WARNING.format(expected=len(data), marked=marked))
 
             print(messages.EXCEL_UPDATED.format(
                 sheet=self.sheet,
@@ -100,6 +102,8 @@ class ExcelSource:
 
         except PermissionError:
             print(messages.EXCEL_LOCKED)
+            raise
 
         except Exception as error:
             print(messages.EXCEL_UPDATE_ERROR.format(error=error))
+            raise

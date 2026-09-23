@@ -17,13 +17,14 @@ from setup import messages
 from setup import ui
 
 
-def update_status(sink, data, count):
+def update_status(sink, data, count, failed=0):
     """
     Ask whether to mark these records as PRINTED, and do it if yes.
 
     sink   - where the statuses get written (the Excel sheet, or the database)
     data   - the records that were just turned into documents
-    count  - how many, for the question
+    count  - how many succeeded, for the question
+    failed - how many failed to render
 
     Returns a bit of text for the summary popup, or an empty string if the
     user said no.
@@ -32,7 +33,10 @@ def update_status(sink, data, count):
     the version was set up with. That was true in the original scripts and
     it stays true here.
     """
-    if not ui.confirm(messages.ASK_UPDATE.format(count=count)):
+    if not ui.confirm(messages.ASK_UPDATE.format(
+        count=count,
+        failed=" ({} failed)".format(failed) if failed else "",
+    )):
         return ""
 
     print(messages.UPDATING.format(target=sink.label))

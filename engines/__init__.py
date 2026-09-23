@@ -6,8 +6,8 @@ There are two engines. A version picks one in versions/registry.py.
     docxtpl_engine.py    Python fills the template (docxtpl)      v3, Z
     mailmerge_engine.py  Word fills it with Mail Merge (COM)      X, Y, O
 
-Both have the same method, generate(records, output_path), and both save
-one merged .docx, so the pipeline can use either without knowing which.
+Both have the same method, generate(records, output_path), and return the
+1-based positions of records saved in the merged .docx.
 
 Helper modules:
 
