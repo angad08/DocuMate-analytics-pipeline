@@ -1,5 +1,6 @@
 """Regression tests for status updates after document generation."""
 
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -123,7 +124,7 @@ def test_locked_workbook_has_no_success_message(tmp_path, monkeypatch):
         def save(self, path):
             raise PermissionError("workbook is locked")
 
-    monkeypatch.setattr("sources.excel.load_workbook", lambda path: LockedWorkbook())
+    monkeypatch.setattr("sources.excel.load_workbook", lambda path, **options: LockedWorkbook())
     monkeypatch.setattr(ui, "confirm", lambda question: True)
     messages = []
     monkeypatch.setattr(ui, "notify", messages.append)
@@ -191,6 +192,44 @@ def test_excel_requires_serial_column(tmp_path):
     source = ExcelSource(str(path), "Records")
     with pytest.raises(ValueError, match="Serial column not found"):
         source.mark_printed(pd.DataFrame({"Serial": ["1/2026"]}))
+
+
+def test_excel_matches_a_formula_serial_and_keeps_the_formula(tmp_path):
+    path = tmp_path / "records.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Records"
+    sheet.append(["Serial", "STATUS"])
+    sheet.append(['="1/2026"', "IN PROCESS"])
+    sheet.append(['="2/2026"', "IN PROCESS"])
+    workbook.save(path)
+
+    # openpyxl can't store a formula's displayed value, but Excel does when
+    # it saves. Add those values the way Excel writes them.
+    with zipfile.ZipFile(path) as original:
+        parts = {name: original.read(name) for name in original.namelist()}
+    xml = parts["xl/worksheets/sheet1.xml"].decode()
+    for row, serial in [(2, "1/2026"), (3, "2/2026")]:
+        xml = xml.replace(
+            '<c r="A{}"><f>"{}"</f><v></v></c>'.format(row, serial),
+            '<c r="A{}" t="str"><f>"{}"</f><v>{}</v></c>'.format(row, serial, serial),
+        )
+    parts["xl/worksheets/sheet1.xml"] = xml.encode()
+    with zipfile.ZipFile(path, "w") as rebuilt:
+        for name, content in parts.items():
+            rebuilt.writestr(name, content)
+
+    source = ExcelSource(str(path), "Records")
+    data = source.load_records()
+    assert list(data["Serial"]) == ["1/2026", "2/2026"]
+
+    source.mark_printed(data.iloc[[0]])
+
+    sheet = load_workbook(path)["Records"]
+    assert sheet["B2"].value == "PRINTED"
+    assert sheet["B3"].value == "IN PROCESS"
+    assert sheet["A2"].value == '="1/2026"'
+    assert sheet["A3"].value == '="2/2026"'
 
 
 def test_excel_warns_when_a_serial_is_missing(tmp_path, capsys):

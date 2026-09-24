@@ -52,6 +52,13 @@ class ExcelSource:
             workbook = load_workbook(self.path)
             sheet = workbook[self.sheet]
 
+            # The same sheet again, showing what each formula displays instead
+            # of the formula. Serial is often a formula (="...A2 & "/" & ..."),
+            # and pandas read the displayed value, so that is what has to be
+            # matched. Only ever read from this copy - saving it would replace
+            # every formula with its last value.
+            shown = load_workbook(self.path, data_only=True)[self.sheet]
+
             # Map column name -> column number, from the header row.
             columns = {}
             for number, cell in enumerate(sheet[1], start=1):
@@ -76,7 +83,7 @@ class ExcelSource:
             marked = 0
 
             for row in range(2, sheet.max_row + 1):
-                if sheet.cell(row=row, column=serial_column).value not in serials:
+                if shown.cell(row=row, column=serial_column).value not in serials:
                     continue
                 status = sheet.cell(row=row, column=status_column).value
                 if status is None:
