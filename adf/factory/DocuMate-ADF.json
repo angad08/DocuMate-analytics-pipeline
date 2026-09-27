@@ -1,0 +1,15 @@
+{
+	"name": "DocuMate-ADF",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "australiaeast",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "1bfade95-8a9d-44aa-b501-0a4f2db51c7e",
+		"tenantId": "5595380b-0770-456b-8755-4a4f95c86be3"
+	}
+}
