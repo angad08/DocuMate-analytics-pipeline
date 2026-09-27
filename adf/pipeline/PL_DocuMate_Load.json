@@ -2,6 +2,61 @@
 	"name": "PL_DocuMate_Load",
 	"properties": {
 		"description": "Loads DocuMate applicant data from the DocuMateSRC sheet on my computer into Azure SQL. It first copies the rows into the staging table documate.stg_applicant, runs data checks (STATUS column exists, no blank or duplicate File_Number), and only then loads the clean rows into documate.applicant.",
+		"activities": [
+			{
+				"name": "Excel_to_database",
+				"description": "Copies the DocuMateSRC sheet from the Excel file on my computer (via documate-local-ir) into the staging table documate.stg_applicant in Azure SQL. Old staging rows are cleared first, so each run starts fresh.",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ExcelSource",
+						"storeSettings": {
+							"type": "FileServerReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": "IF OBJECT_ID('documate.stg_applicant') IS NOT NULL TRUNCATE TABLE documate.stg_applicant",
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"tableOption": "autoCreate",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DocuMate_ADF_DataFrame",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_DocuMate_Staging",
+						"type": "DatasetReference"
+					}
+				]
+			}
+		],
 		"annotations": []
 	}
 }
