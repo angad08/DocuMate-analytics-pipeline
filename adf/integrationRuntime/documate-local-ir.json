@@ -1,0 +1,7 @@
+{
+	"name": "documate-local-ir",
+	"properties": {
+		"type": "SelfHosted",
+		"description": "Connects Azure Data Factory to the Excel files stored on my computer. This allows ADF to read applicant data from the selected Excel sheet and load it into the DocuMate Azure SQL database."
+	}
+}
