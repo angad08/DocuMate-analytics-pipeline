@@ -1,0 +1,86 @@
+{
+	"name": "DocuMate_DB",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_DocuMate_DB",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "file_number",
+				"type": "varchar"
+			},
+			{
+				"name": "serial",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "name",
+				"type": "nvarchar"
+			},
+			{
+				"name": "sex",
+				"type": "char"
+			},
+			{
+				"name": "birth_date",
+				"type": "date"
+			},
+			{
+				"name": "place",
+				"type": "nvarchar"
+			},
+			{
+				"name": "state_code",
+				"type": "char"
+			},
+			{
+				"name": "name_of_father",
+				"type": "nvarchar"
+			},
+			{
+				"name": "name_of_mother",
+				"type": "nvarchar"
+			},
+			{
+				"name": "address_line_1",
+				"type": "nvarchar"
+			},
+			{
+				"name": "address_line_2",
+				"type": "nvarchar"
+			},
+			{
+				"name": "address_line_3",
+				"type": "nvarchar"
+			},
+			{
+				"name": "registration_date",
+				"type": "date"
+			},
+			{
+				"name": "status",
+				"type": "nvarchar"
+			},
+			{
+				"name": "date_issued",
+				"type": "date"
+			},
+			{
+				"name": "mha_file_number",
+				"type": "varchar"
+			},
+			{
+				"name": "ib_staff_authority_id",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "documate",
+			"table": "applicant"
+		}
+	}
+}
