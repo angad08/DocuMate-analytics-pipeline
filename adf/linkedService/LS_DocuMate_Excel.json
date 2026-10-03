@@ -6,9 +6,9 @@
 		"annotations": [],
 		"type": "FileServer",
 		"typeProperties": {
-			"host": "C:\\Users\\Angat\\OneDrive\\Documents\\DocuMate-analytics-pipeline-main\\files\\data",
+			"host": "C:\\Users\\Angat\\OneDrive\\Documents\\DocuMate-analytics-pipeline-main\\files\\data\\test_data\\Test_Insert_data.xlsx",
 			"userId": "desktop-qa5h6kj\\angat",
-			"encryptedCredential": "eyJDcmVkZW50aWFsSWQiOiIyOWJkZTk2NC0zM2QzLTRiMWYtYWMyZi03ZWFjYjRkYWQ2NzgiLCJWZXJzaW9uIjoiMi4wIiwiQ2xhc3NUeXBlIjoiTWljcm9zb2Z0LkRhdGFQcm94eS5Db3JlLkludGVyU2VydmljZURhdGFDb250cmFjdC5DcmVkZW50aWFsU1UwNkNZMTQifQ=="
+			"encryptedCredential": "eyJDcmVkZW50aWFsSWQiOiJkZGZmYWYyNi03ZThkLTQyMjctODdiNC05YmRiZTQ3NTFiNmUiLCJWZXJzaW9uIjoiMi4wIiwiQ2xhc3NUeXBlIjoiTWljcm9zb2Z0LkRhdGFQcm94eS5Db3JlLkludGVyU2VydmljZURhdGFDb250cmFjdC5DcmVkZW50aWFsU1UwNkNZMTQifQ=="
 		},
 		"connectVia": {
 			"referenceName": "documate-local-ir",
