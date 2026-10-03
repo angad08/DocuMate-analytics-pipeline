@@ -1,0 +1,25 @@
+{
+	"name": "DocuMate_MHA",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_DocuMate_DB",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "mha_file_number",
+				"type": "varchar"
+			},
+			{
+				"name": "mha_date",
+				"type": "date"
+			}
+		],
+		"typeProperties": {
+			"schema": "documate",
+			"table": "ministryofhomeaffairs"
+		}
+	}
+}

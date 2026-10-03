@@ -1,5 +1,5 @@
 {
-	"name": "DocuMate_DB",
+	"name": "DocuMate_Applicants",
 	"properties": {
 		"linkedServiceName": {
 			"referenceName": "LS_DocuMate_DB",
