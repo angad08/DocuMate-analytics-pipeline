@@ -10,8 +10,10 @@
 		"typeProperties": {
 			"sheetName": "Sheet1",
 			"location": {
-				"type": "FileServerLocation"
-			}
+				"type": "FileServerLocation",
+				"fileName": "Test_Insert_data.xlsx"
+			},
+			"firstRowAsHeader": true
 		},
 		"schema": [
 			{
