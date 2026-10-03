@@ -1,0 +1,42 @@
+{
+	"name": "dataflow1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "DocumateExcel",
+						"type": "DatasetReference"
+					},
+					"name": "ExcelSource"
+				}
+			],
+			"sinks": [],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          File_Number as string,",
+				"          Name as string,",
+				"          Sex as string,",
+				"          Birth_Date as date 'dd-MM-yyyy',",
+				"          Place as string,",
+				"          State as string,",
+				"          Name_Of_Father as string,",
+				"          Name_Of_Mother as string,",
+				"          Address_line_1 as string,",
+				"          Address_line_2 as string,",
+				"          Address_line_3 as string,",
+				"          Registration_Date as date 'dd-MM-yyyy',",
+				"          MHA_FILE_NUMBER as string,",
+				"          MHA_DATE as date 'dd-MM-yyyy',",
+				"          ib_staff_authority_id as string,",
+				"          Signing_Authority as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> ExcelSource"
+			]
+		}
+	}
+}

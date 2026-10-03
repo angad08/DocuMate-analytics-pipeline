@@ -1,0 +1,86 @@
+{
+	"name": "DocumateExcel",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_DocuMate_Blob_Excel",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Excel",
+		"typeProperties": {
+			"sheetName": "Sheet1",
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"fileName": "Test_Insert_data.xlsx",
+				"container": "documate-raw"
+			},
+			"firstRowAsHeader": true
+		},
+		"schema": [
+			{
+				"name": "File_Number",
+				"type": "String"
+			},
+			{
+				"name": "Name",
+				"type": "String"
+			},
+			{
+				"name": "Sex",
+				"type": "String"
+			},
+			{
+				"name": "Birth_Date",
+				"type": "String"
+			},
+			{
+				"name": "Place",
+				"type": "String"
+			},
+			{
+				"name": "State",
+				"type": "String"
+			},
+			{
+				"name": "Name_Of_Father",
+				"type": "String"
+			},
+			{
+				"name": "Name_Of_Mother",
+				"type": "String"
+			},
+			{
+				"name": "Address_line_1",
+				"type": "String"
+			},
+			{
+				"name": "Address_line_2",
+				"type": "String"
+			},
+			{
+				"name": "Address_line_3",
+				"type": "String"
+			},
+			{
+				"name": "Registration_Date",
+				"type": "String"
+			},
+			{
+				"name": "MHA_FILE_NUMBER",
+				"type": "String"
+			},
+			{
+				"name": "MHA_DATE",
+				"type": "String"
+			},
+			{
+				"name": "ib_staff_authority_id",
+				"type": "String"
+			},
+			{
+				"name": "Signing_Authority",
+				"type": "String"
+			}
+		]
+	}
+}
