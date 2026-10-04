@@ -23,6 +23,11 @@ Table names start with {schema}. DatabaseSource.sql() replaces it with
 # Every column has an alias. Python reads the columns by position, so the
 # aliases are not needed by the code, but they give readable column names
 # when the query is run by hand in the Azure portal query editor.
+#
+# state_code is CHAR(3), so a two-letter code is stored padded: "WA " not
+# "WA". Without RTRIM that padding ends up inside place_of_birth and prints
+# on the certificate as "GAILBURGH, WA ". RTRIM works the same on both
+# databases, so queries_postgres.py does this too.
 PENDING_APPLICANTS = """
     SELECT
         a.file_number                                             AS file_number,
@@ -30,7 +35,7 @@ PENDING_APPLICANTS = """
         UPPER(a.name)                                             AS name,
         UPPER(a.sex)                                              AS sex,
         a.birth_date                                              AS birth_date,
-        UPPER(CONCAT(a.place, ', ', a.state_code))                AS place_of_birth,
+        UPPER(CONCAT(a.place, ', ', RTRIM(a.state_code)))         AS place_of_birth,
         UPPER(a.name_of_father)                                   AS name_of_father,
         UPPER(a.name_of_mother)                                   AS name_of_mother,
         UPPER(CONCAT(a.address_line_1, ', ',
