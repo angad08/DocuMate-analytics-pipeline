@@ -1,0 +1,143 @@
+{
+	"name": "DocumateDataFlow",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "Documate_Excel",
+						"type": "DatasetReference"
+					},
+					"name": "Documatedf"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "DS_Documate_MHA",
+						"type": "DatasetReference"
+					},
+					"name": "SinkMHA"
+				},
+				{
+					"dataset": {
+						"referenceName": "DS_Documate_DB",
+						"type": "DatasetReference"
+					},
+					"name": "SinkApplicants"
+				}
+			],
+			"transformations": [
+				{
+					"name": "SelectMHA"
+				},
+				{
+					"name": "AlterMHA"
+				},
+				{
+					"name": "SelectApplicants"
+				},
+				{
+					"name": "AlterApplicants"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          File_Number as string,",
+				"          Name as string,",
+				"          Sex as string,",
+				"          Birth_Date as date 'yyyy-MM-dd',",
+				"          Place as string,",
+				"          State as string,",
+				"          Name_Of_Father as string,",
+				"          Name_Of_Mother as string,",
+				"          Address_line_1 as string,",
+				"          Address_line_2 as string,",
+				"          Address_line_3 as string,",
+				"          Registration_Date as date 'yyyy-MM-dd',",
+				"          MHA_FILE_NUMBER as string,",
+				"          MHA_DATE as date 'yyyy-MM-dd',",
+				"          ib_staff_authority_id as string,",
+				"          Signing_Authority as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> Documatedf",
+				"Documatedf select(mapColumn(",
+				"          mha_file_number = MHA_FILE_NUMBER,",
+				"          mha_date = MHA_DATE",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> SelectMHA",
+				"SelectMHA alterRow(upsertIf(true())) ~> AlterMHA",
+				"Documatedf select(mapColumn(",
+				"          File_Number,",
+				"          Name,",
+				"          Sex,",
+				"          Birth_Date,",
+				"          Place,",
+				"          State,",
+				"          Name_Of_Father,",
+				"          Name_Of_Mother,",
+				"          Address_line_1,",
+				"          Address_line_2,",
+				"          Address_line_3,",
+				"          Registration_Date,",
+				"          ib_staff_authority_id,",
+				"          Signing_Authority",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> SelectApplicants",
+				"SelectApplicants alterRow(upsertIf(true())) ~> AlterApplicants",
+				"AlterMHA sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          mha_file_number as string,",
+				"          mha_date as date",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:false,",
+				"     updateable:false,",
+				"     upsertable:true,",
+				"     keys:['mha_file_number'],",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     saveOrder: 1,",
+				"     errorHandlingOption: 'stopOnFirstError') ~> SinkMHA",
+				"AlterApplicants sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          file_number as string,",
+				"          serial as integer,",
+				"          name as string,",
+				"          sex as string,",
+				"          birth_date as date,",
+				"          place as string,",
+				"          state_code as string,",
+				"          name_of_father as string,",
+				"          name_of_mother as string,",
+				"          address_line_1 as string,",
+				"          address_line_2 as string,",
+				"          address_line_3 as string,",
+				"          registration_date as date,",
+				"          status as string,",
+				"          date_issued as date,",
+				"          mha_file_number as string,",
+				"          ib_staff_authority_id as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:false,",
+				"     updateable:false,",
+				"     upsertable:true,",
+				"     keys:['File_Number'],",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     saveOrder: 2,",
+				"     errorHandlingOption: 'stopOnFirstError') ~> SinkApplicants"
+			]
+		}
+	}
+}
