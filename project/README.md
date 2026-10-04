@@ -126,7 +126,7 @@ use.
 | `engines/` | How the Word file is made, docxtpl or Mail Merge | Adding a rendering method |
 | `versions/` | Which combination each version uses | **Adding a version, one entry in `registry.py`** |
 | `setup/` | Paths, settings, messages, popups | Changing where things live or what the user sees |
-| `tools/` | `seed_database.py`, loads records into PostgreSQL | Seeding the database for `z` and `o` |
+| `tools/` | `seed_database.py`, loads records into either backend | Seeding the database for `z` and `o` |
 | `files/` | What the code reads and writes | Swapping the workbook or the templates |
 | `project/` | Docs, diagram, dashboard, schema. Not code | Updating documentation |
 
@@ -163,6 +163,10 @@ the version list's own consistency.
 Only needed for `z` and `o`.
 
 ```bash
+# Azure SQL (default backend)
+sqlcmd -S YOUR_SERVER.database.windows.net -d YOUR_DB -U YOUR_USER -P YOUR_PASSWORD        -i project/database_schema/DocuMate_Data_Schema_AzureSQL.sql
+
+# PostgreSQL
 psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f project/database_schema/DocuMate_Data_Schema.sql
 ```
 
@@ -178,13 +182,17 @@ cp .env.example .env
 ```
 
 ```
-DOCUMATE_DB_HOST=your-host
-DOCUMATE_DB_NAME=postgres
+DOCUMATE_DB_BACKEND=azuresql
+DOCUMATE_DB_HOST=your-server.database.windows.net
+DOCUMATE_DB_NAME=your-database
 DOCUMATE_DB_USER=your-user
 DOCUMATE_DB_PASSWORD=your-password
-DOCUMATE_DB_PORT=5432
-DOCUMATE_DB_SSLMODE=require
 ```
+
+The same four names work for both backends, so switching database is one line.
+`DOCUMATE_DB_PORT` defaults to the backend's own port, 1433 for Azure SQL and
+5432 for PostgreSQL. `DOCUMATE_DB_SSLMODE` is PostgreSQL only; Azure SQL always
+encrypts.
 
 `.env` is gitignored. If a value is missing, DocuMate stops immediately and
 names the variable instead of failing later with a confusing connection error.
@@ -196,7 +204,11 @@ python -m tools.seed_database --insert
 python -m tools.seed_database --select    # what is pending
 ```
 
-The demo environment uses Supabase, but any PostgreSQL host works.
+`--insert` can be run as often as you like: rows already in the database are
+skipped, not duplicated.
+
+The demo environment uses Supabase, but any PostgreSQL host works, as does
+any Azure SQL database.
 
 ---
 

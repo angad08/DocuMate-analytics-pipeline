@@ -1,5 +1,5 @@
 """
-Load records from a spreadsheet into PostgreSQL, and look at what's pending.
+Load records from a spreadsheet into the database, and look at what's pending.
 
 This was src/loadData.py. It isn't part of making documents - it's the
 setup tool for the database that Z and O read from. It stays a separate
@@ -9,7 +9,20 @@ tool because it's the only thing here that writes new records.
     python -m tools.seed_database --select
     python -m tools.seed_database --insert --file files/data/test_data/Test_Insert_data.xlsx
 
-Connection details come from .env, same as everything else.
+Connection details come from .env, same as everything else, and so does the
+database: this tool writes to whichever backend DOCUMATE_DB_BACKEND selects,
+Azure SQL or PostgreSQL. Create the tables first with the matching script in
+project/database_schema.
+
+Two things differ between the backends, and both are handled here:
+
+    parameter marks   PostgreSQL uses %s, pyodbc uses ?   (PLACEHOLDER)
+    skipping rows     PostgreSQL has ON CONFLICT DO NOTHING and T-SQL has
+                      nothing like it, so rows that are already there are
+                      found first with existing_keys() and simply not sent
+
+Because of the second one, --insert can be run as often as you like: rows
+already in the database are left alone, never duplicated.
 """
 
 import argparse
@@ -18,10 +31,17 @@ import os
 import pandas as pd
 
 from setup import config
-from sources.queries import PENDING_APPLICANTS
+from sources import make_database_source
 
 
 DEFAULT_SHEET = "Sheet1"
+
+# The parameter mark each driver expects, written as {p} in the SQL below.
+# psycopg2 uses %s, pyodbc uses ?.
+PLACEHOLDER = {
+    "postgres": "%s",
+    "azuresql": "?",
+}
 
 
 def default_workbook():
@@ -56,37 +76,41 @@ STATE_MASTER = {
 # ---------------------------------------------------------------------------
 # The inserts
 # ---------------------------------------------------------------------------
+#
+# These are plain INSERTs that both databases accept. There is no
+# ON CONFLICT DO NOTHING: T-SQL has no equivalent, so insert_data() checks
+# what is already there first and skips those rows instead.
+#
+# {p} becomes the driver's parameter mark and {schema} becomes the schema
+# prefix. sql_for() fills in both, in that order.
 
 INSERT_STATE = """
-    INSERT INTO state (state_code, state_name)
-    VALUES (%s, %s)
-    ON CONFLICT (state_code) DO NOTHING;
+    INSERT INTO {schema}state (state_code, state_name)
+    VALUES ({p}, {p});
 """
 
 INSERT_AUTHORITY = """
-    INSERT INTO ib_authority (
+    INSERT INTO {schema}ib_authority (
         ib_staff_authority_id,
         ib_staff_authority_name,
         ib_staff_authority_designation
     )
-    VALUES (%s, %s, %s)
-    ON CONFLICT (ib_staff_authority_id) DO NOTHING;
+    VALUES ({p}, {p}, {p});
 """
 
 INSERT_MHA = """
-    INSERT INTO ministryofhomeaffairs (mha_file_number, mha_date)
-    VALUES (%s, %s)
-    ON CONFLICT (mha_file_number) DO NOTHING;
+    INSERT INTO {schema}ministryofhomeaffairs (mha_file_number, mha_date)
+    VALUES ({p}, {p});
 """
 
 INSERT_APPLICANT = """
-    INSERT INTO applicant (
+    INSERT INTO {schema}applicant (
         file_number, name, sex, birth_date, place, state_code,
         name_of_father, name_of_mother,
         address_line_1, address_line_2, address_line_3,
         registration_date, mha_file_number, ib_staff_authority_id
     )
-    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
+    VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p});
 """
 
 # Spreadsheet columns, in the order INSERT_APPLICANT wants them.
@@ -99,12 +123,74 @@ APPLICANT_COLUMNS = [
 ]
 
 
-def insert_data(cursor, connection, workbook, sheet):
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def sql_for(source, template, placeholder):
+    """
+    Turn one of the templates above into SQL this backend can run.
+
+        {p}       the driver's parameter mark, %s or ?
+        {schema}  the schema prefix, filled in by the source
+
+    {p} is swapped with str.replace first, so {schema} is still there for
+    source.sql() to fill in - the same trick queries_tsql.mark_printed_sql
+    uses.
+    """
+    return source.sql(template.replace("{p}", placeholder))
+
+
+def existing_keys(source, table, column):
+    """
+    Return the values already in one column, as a set of stripped strings.
+
+    This is what replaces ON CONFLICT DO NOTHING. The table and column
+    names come from the constants in this file, never from user input.
+
+    The values are stripped because state_code is CHAR(3): a two-letter
+    code comes back padded as "SA ", which would not match the "SA" in
+    STATE_MASTER and would make us insert it a second time.
+    """
+    source.cursor.execute(source.sql("SELECT " + column + " FROM {schema}" + table + ";"))
+
+    return set(str(row[0]).strip() for row in source.cursor.fetchall())
+
+
+def native(value):
+    """
+    Turn a value read by pandas into a plain Python one the drivers accept.
+
+        NaT / NaN          ->  None
+        pandas Timestamp   ->  datetime.date   (the columns are all DATE)
+        numpy int64        ->  int
+
+    pyodbc is strict about this: it refuses a numpy integer outright, where
+    psycopg2 happens to accept some of them. Converting here means the same
+    spreadsheet loads into either database.
+    """
+    if pd.isna(value):
+        return None
+
+    if hasattr(value, "to_pydatetime"):
+        return value.date()
+
+    if hasattr(value, "item"):
+        return value.item()
+
+    return value
+
+
+# ---------------------------------------------------------------------------
+# The work
+# ---------------------------------------------------------------------------
+
+def insert_data(source, placeholder, workbook, sheet):
     """
     Load the spreadsheet into all four tables.
 
-    Every insert says ON CONFLICT DO NOTHING, so running this twice is
-    safe - rows that already exist are left alone, not duplicated.
+    Rows that are already in the database are skipped, so running this
+    twice is safe - nothing is duplicated and nothing is overwritten.
     """
     data = pd.read_excel(workbook, sheet_name=sheet)
     data.columns = [str(c).strip() for c in data.columns]
@@ -116,27 +202,50 @@ def insert_data(cursor, connection, workbook, sheet):
             os.path.basename(workbook) + " is missing columns: " + ", ".join(missing)
         )
 
-    # The lookup tables first - applicant rows point at both of them.
-    for code in STATE_MASTER:
-        cursor.execute(INSERT_STATE, (code.upper(), STATE_MASTER[code].upper()))
+    cursor = source.cursor
 
+    # The lookup tables first - applicant rows point at all of them.
+    known_states = existing_keys(source, "state", "state_code")
+    for code in STATE_MASTER:
+        if code.upper() in known_states:
+            continue
+        cursor.execute(
+            sql_for(source, INSERT_STATE, placeholder),
+            (code.upper(), STATE_MASTER[code].upper()),
+        )
+
+    known_authorities = existing_keys(source, "ib_authority", "ib_staff_authority_id")
     for full_name in AUTHORITY_MAP:
-        cursor.execute(INSERT_AUTHORITY, (
+        if AUTHORITY_MAP[full_name] in known_authorities:
+            continue
+        cursor.execute(sql_for(source, INSERT_AUTHORITY, placeholder), (
             AUTHORITY_MAP[full_name],
             full_name.split(",")[0].strip(),
             full_name.split(",")[-1].strip(),
         ))
 
     # MHA is the parent of applicant, so it has to go in first.
+    known_mha = existing_keys(source, "ministryofhomeaffairs", "mha_file_number")
     mha_rows = data[["MHA_FILE_NUMBER", "MHA_DATE"]].drop_duplicates()
     for _, row in mha_rows.iterrows():
-        cursor.execute(INSERT_MHA, (row["MHA_FILE_NUMBER"], row["MHA_DATE"]))
+        if str(row["MHA_FILE_NUMBER"]).strip() in known_mha:
+            continue
+        cursor.execute(
+            sql_for(source, INSERT_MHA, placeholder),
+            (native(row["MHA_FILE_NUMBER"]), native(row["MHA_DATE"])),
+        )
 
     # Now the applicants.
+    known_applicants = existing_keys(source, "applicant", "file_number")
     unknown_authorities = set()
     inserted = 0
+    skipped = 0
 
     for _, row in data.iterrows():
+        if str(row["File_Number"]).strip() in known_applicants:
+            skipped = skipped + 1
+            continue
+
         authority = row["Signing_Authority"]
         authority_id = AUTHORITY_MAP.get(authority)
 
@@ -145,14 +254,17 @@ def insert_data(cursor, connection, workbook, sheet):
             # instead, because NULL means a certificate with no signature.
             unknown_authorities.add(str(authority))
 
-        values = [row[c] for c in APPLICANT_COLUMNS]
+        values = [native(row[c]) for c in APPLICANT_COLUMNS]
         values.append(authority_id)
 
-        cursor.execute(INSERT_APPLICANT, tuple(values))
+        cursor.execute(sql_for(source, INSERT_APPLICANT, placeholder), tuple(values))
         inserted = inserted + 1
 
-    connection.commit()
+    source.connection.commit()
     print("DocuMate : inserted " + str(inserted) + " rows from " + os.path.basename(workbook))
+
+    if skipped:
+        print("DocuMate : skipped " + str(skipped) + " rows already in the database.")
 
     if unknown_authorities:
         print("\nDocuMate : these signing authorities are not in AUTHORITY_MAP,")
@@ -161,10 +273,12 @@ def insert_data(cursor, connection, workbook, sheet):
             print("             - " + name)
 
 
-def select_data(cursor):
+def select_data(source):
     """Print every applicant not yet marked PRINTED - what Z and O would read."""
-    cursor.execute(PENDING_APPLICANTS)
-    rows = cursor.fetchall()
+    # source.queries is the backend's own SQL module, so this is the very
+    # same query Z and O run.
+    source.cursor.execute(source.sql(source.queries.PENDING_APPLICANTS))
+    rows = source.cursor.fetchall()
 
     if not rows:
         print("DocuMate : no pending records found.")
@@ -192,25 +306,24 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    import psycopg2
+    backend = config.database_backend()
+    source = make_database_source()
 
-    connection = psycopg2.connect(**config.database_settings())
-    cursor = connection.cursor()
+    print("DocuMate : using " + source.label + ".")
 
     try:
         if args.insert:
             workbook = args.file or default_workbook()
-            insert_data(cursor, connection, workbook, args.sheet)
+            insert_data(source, PLACEHOLDER[backend], workbook, args.sheet)
         else:
-            select_data(cursor)
+            select_data(source)
 
     except Exception:
-        connection.rollback()
+        source.connection.rollback()
         raise
 
     finally:
-        cursor.close()
-        connection.close()
+        source.close()
 
     return 0
 

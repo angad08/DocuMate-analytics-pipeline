@@ -18,6 +18,7 @@ from setup import config
 from engines.mailmerge_engine import MailMergeEngine
 from engines.docxtpl_engine import DocxtplEngine
 from flow.pipeline import Pipeline
+from sources import make_database_source
 from sources.excel import ExcelSource
 from versions.registry import VERSIONS
 from versions.registry import Version
@@ -32,16 +33,9 @@ def build_source(version):
 
     if version.source == "database":
         # The database backend comes from DOCUMATE_DB_BACKEND in .env, not
-        # from the version. The backend module is imported only now, so
-        # only the selected backend's driver (pyodbc or psycopg2) needs to
-        # be installed, and the Excel versions need neither.
-        import importlib
-
-        backend = config.DATABASE_BACKENDS[config.database_backend()]
-        module = importlib.import_module(backend["module"])
-        source_class = getattr(module, backend["cls"])
-
-        return source_class(config.database_settings(), config.database_schema())
+        # from the version. make_database_source() picks it up and imports
+        # only that backend's driver.
+        return make_database_source()
 
     raise ValueError(
         "Version '" + version.key + "' asks for an unknown source: " + str(version.source)

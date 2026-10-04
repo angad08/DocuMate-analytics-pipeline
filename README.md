@@ -70,7 +70,7 @@ The Excel versions (`v3`, `x`, `y`) run from the synthetic workbook in `files/da
 
 ├── main.py          command-line runner
 ├── flow/            validation, pipeline, status updates
-├── sources/         Excel and PostgreSQL readers
+├── sources/         Excel, Azure SQL and PostgreSQL readers
 ├── engines/         docxtpl and Word Mail Merge renderers
 ├── versions/        v3, X, Y, Z and O settings
 ├── setup/           paths, configuration, messages, UI
@@ -82,22 +82,34 @@ To change a version, edit [the version registry](versions/registry.py). To chang
 
 ## Database setup
 
-Z and O use PostgreSQL. Create the schema with:
+Z and O use Azure SQL or PostgreSQL, chosen by `DOCUMATE_DB_BACKEND`. Create the
+tables with the script for your database:
 
 ```bash
+# Azure SQL (default)
+sqlcmd -S YOUR_SERVER.database.windows.net -d YOUR_DB -U YOUR_USER -P YOUR_PASSWORD        -i project/database_schema/DocuMate_Data_Schema_AzureSQL.sql
+
+# PostgreSQL
 psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f project/database_schema/DocuMate_Data_Schema.sql
 ```
 
 Copy `.env.example` to `.env` and enter the database connection values. `.env` is ignored by Git; never place passwords or connection credentials in source files.
 
 ```text
-DOCUMATE_DB_HOST=your-host
-DOCUMATE_DB_NAME=postgres
+DOCUMATE_DB_BACKEND=azuresql
+DOCUMATE_DB_HOST=your-server.database.windows.net
+DOCUMATE_DB_NAME=your-database
 DOCUMATE_DB_USER=your-user
 DOCUMATE_DB_PASSWORD=your-password
-DOCUMATE_DB_PORT=5432
-DOCUMATE_DB_SSLMODE=require
 ```
+
+Leave `DOCUMATE_DB_PORT` unset and the backend's own port is used: 1433 for Azure
+SQL, 5432 for PostgreSQL. Azure SQL also needs Microsoft ODBC Driver 18 installed
+and your client IP allowed under the SQL server's Security -> Networking. Run
+`python main.py --check` to see what was picked up.
+
+Load the sample records with `python -m tools.seed_database --insert`; it writes
+to whichever backend is selected.
 
 ## Further reading
 
