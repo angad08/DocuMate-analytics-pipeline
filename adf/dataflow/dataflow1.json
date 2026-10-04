@@ -5,26 +5,14 @@
 		"typeProperties": {
 			"sources": [
 				{
-					"dataset": {
-						"referenceName": "DocumateExcel",
-						"type": "DatasetReference"
-					},
 					"name": "ApplicantBranch"
 				}
 			],
 			"sinks": [
 				{
-					"dataset": {
-						"referenceName": "DocuMate_MHA",
-						"type": "DatasetReference"
-					},
 					"name": "SinkMHA"
 				},
 				{
-					"dataset": {
-						"referenceName": "DocuMate_Applicants",
-						"type": "DatasetReference"
-					},
 					"name": "SinkApplicant"
 				}
 			],
@@ -62,8 +50,7 @@
 				"          Signing_Authority as string",
 				"     ),",
 				"     allowSchemaDrift: true,",
-				"     validateSchema: false,",
-				"     ignoreNoFilesFound: false) ~> ApplicantBranch",
+				"     validateSchema: false) ~> ApplicantBranch",
 				"ApplicantBranch select(mapColumn(",
 				"          mha_file_number = MHA_FILE_NUMBER,",
 				"          mha_date = MHA_DATE",
@@ -92,51 +79,15 @@
 				"SelectApplicant alterRow(upsertIf(true())) ~> UpsertApplicant",
 				"UpsertMHA sink(allowSchemaDrift: true,",
 				"     validateSchema: false,",
-				"     input(",
-				"          mha_file_number as string,",
-				"          mha_date as date",
-				"     ),",
-				"     deletable:false,",
-				"     insertable:false,",
-				"     updateable:false,",
-				"     upsertable:true,",
-				"     keys:['mha_file_number'],",
-				"     format: 'table',",
 				"     skipDuplicateMapInputs: true,",
 				"     skipDuplicateMapOutputs: true,",
 				"     saveOrder: 1,",
-				"     errorHandlingOption: 'stopOnFirstError') ~> SinkMHA",
+				"     format: 'table') ~> SinkMHA",
 				"UpsertApplicant sink(allowSchemaDrift: true,",
 				"     validateSchema: false,",
-				"     input(",
-				"          file_number as string,",
-				"          serial as integer,",
-				"          name as string,",
-				"          sex as string,",
-				"          birth_date as date,",
-				"          place as string,",
-				"          state_code as string,",
-				"          name_of_father as string,",
-				"          name_of_mother as string,",
-				"          address_line_1 as string,",
-				"          address_line_2 as string,",
-				"          address_line_3 as string,",
-				"          registration_date as date,",
-				"          status as string,",
-				"          date_issued as date,",
-				"          mha_file_number as string,",
-				"          ib_staff_authority_id as string",
-				"     ),",
-				"     deletable:false,",
-				"     insertable:false,",
-				"     updateable:false,",
-				"     upsertable:true,",
-				"     keys:['file_number'],",
-				"     format: 'table',",
 				"     skipDuplicateMapInputs: true,",
 				"     skipDuplicateMapOutputs: true,",
 				"     saveOrder: 2,",
-				"     errorHandlingOption: 'stopOnFirstError',",
 				"     mapColumn(",
 				"          file_number = File_Number,",
 				"          name = Name,",
@@ -152,7 +103,8 @@
 				"          registration_date = Registration_Date,",
 				"          mha_file_number = MHA_FILE_NUMBER,",
 				"          ib_staff_authority_id",
-				"     )) ~> SinkApplicant"
+				"     ),",
+				"     format: 'table') ~> SinkApplicant"
 			]
 		}
 	}
