@@ -32,6 +32,8 @@ import datetime
 import pandas as pd
 
 from setup import messages
+from sources.excel_format import full_sex
+from sources.excel_format import serial_for
 
 
 # The columns PENDING_APPLICANTS returns, in the same order as its SELECT.
@@ -81,6 +83,20 @@ def as_date(value):
     return str(value)
 
 
+def serial_with_year(number, registration_date, fallback_year):
+    """
+    "123" and a 2025 registration -> "123/2025".
+
+    Same rule the Excel route uses, so both print the same thing. Falls
+    back to the year passed in when the row has no registration date,
+    which keeps a serial from coming out bare.
+    """
+    serial = serial_for(number, registration_date)
+    if serial and "/" not in serial:
+        serial = serial + "/" + str(fallback_year)
+    return serial
+
+
 def build_record(row, year):
     """
     Turn one database row into the fields a Word template expects.
@@ -98,9 +114,18 @@ def build_record(row, year):
 
     return {
         "File_Number": r["file_number"],
-        "Serial": str(r["serial"]) + "/" + str(year),
+        # The year comes from the record's own registration date, not from
+        # today. Using the current year meant a record registered in 2025
+        # printed as "1/2026" if it was run this year, and would say
+        # "1/2027" next January - the number changed with the calendar
+        # rather than describing the registration. `year` is only a
+        # fallback for a row with no registration date.
+        "Serial": serial_with_year(r["serial"], r["registration_date"], year),
         "Name": r["name"],
-        "Sex": r["sex"],
+        # The same rule the Excel route uses. The SQL only upper-cases,
+        # so a database certificate used to print "F" where an Excel one
+        # printed "FEMALE" - same applicant, same template, two answers.
+        "Sex": full_sex(r["sex"]),
         "When_and_where_born": as_date(r["birth_date"]) + ", " + str(r["place_of_birth"]),
         "Name_of_the_Father": r["name_of_father"],
         "Name_of_the_Mother": r["name_of_mother"],
