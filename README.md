@@ -2,44 +2,83 @@
 
 Document automation and data validation for consular birth-registration certificates.
 
-Officers were copying applicant details from Excel into Word templates, one certificate at a time. At the measured manual rate of **315 seconds per record**, a 1,440-record workload takes **126 hours** of hands-on work. DocuMate reduces that work to minutes while stopping incomplete or duplicate records before a certificate is produced.
+DocuMate replaces the manual copying of applicant details from Excel into Word certificates. It started as a Python script and grew into a modular tool supporting Excel, PostgreSQL and Azure SQL, with different document-generation methods for different workloads. An optional Azure Data Factory pipeline loads spreadsheet data into Azure SQL.
 
 ![DocuMate workflow](project/diagram/DocuMate%20Workflow%20Architecture%20Diagram.png)
 
 ## The problem
 
-The manual process was slow, error-prone, and difficult to control. Excel was being used both as the data store and as the way to track which records had been processed. That meant there was no dependable validation, no reliable view of backlog, and no consistent way to produce large batches of certificates.
+Officers prepared certificates by copying applicant details into Word, one record at a time. Excel also held the processing status, so staff had to check missing details, track completed records and work through the backlog manually.
 
-DocuMate automates the full flow:
-
-1. Read applicant records from Excel or PostgreSQL.
-2. Validate the records before document generation.
-3. Create a single print-ready Word document.
-4. Mark successfully processed records as `PRINTED`.
-5. Keep the same PostgreSQL data available for reporting.
+DocuMate brings document generation and status tracking into one workflow, with validation for the Excel versions and a shared database for the database versions and reporting.
 
 ## Impact
 
-| Measure | Manual process | DocuMate O |
-| --- | ---: | ---: |
-| 1,440 records | 126 hours | about 100 seconds |
-| Validation | manual | five blocking checks |
-| Status tracking | manual | write-back to Excel or PostgreSQL |
-| Reporting | none | shared PostgreSQL data for Power BI |
+- **Operational use:** helped the Dispatch team clear approximately 88% of a pending backlog in one week (480 of 540 cases).
+- **Benchmark:** DocuMate O processed 1,440 records in about 100 seconds. At the measured manual rate of 315 seconds per record, the equivalent manual workload is an estimated 126 hours.
+- **Processing control:** successfully generated records are marked as `PRINTED`, so subsequent runs can select pending work.
+- **Reporting:** Power BI can read the same PostgreSQL data used by DocuMate to report on processing volume and backlog.
 
-The value is not only speed. The validation stage stops a run if required fields are blank, the `STATUS` column is missing, or a file number is duplicated. It prevents a flawed record from becoming a flawed certificate.
+The benchmark measures automated processing, not the full time needed for review, signing and dispatch.
+
+## How it works
+
+1. **Read pending records** from Excel, PostgreSQL or Azure SQL, depending on the selected version.
+2. **Apply the version's checks.** Excel versions run the five-stage validation routine. Database versions use SQL filtering and database constraints; they do not run that same routine.
+3. **Generate certificates** in a combined Word document using Python template rendering or Word Mail Merge.
+4. **Update processing status** for successfully generated records in the source.
+5. **Use the database for reporting**, without copying the records into a separate reporting spreadsheet.
+
+The optional ADF route adds an ingestion step before the database workflow:
+
+```text
+Excel in Blob Storage → ADF → Azure SQL → DocuMate → Word certificates
+                                            ↓
+                                  Processing-status updates
+```
+
+ADF loads the records. DocuMate runs separately to generate the documents.
 
 ## Versions
 
-| Version | Source | Rendering | Purpose |
+| Version | Source | Document generation | Purpose |
 | --- | --- | --- | --- |
 | **v3** | Excel | `docxtpl` | Production Excel workflow with validation and merged output |
-| **X** | Excel | Word Mail Merge | Batched at 250 records for large runs |
+| **X** | Excel | Word Mail Merge | Batches of 250 records for large runs |
 | **Y** | Excel | Word Mail Merge | One batch; suitable for smaller runs |
-| **Z** | PostgreSQL | `docxtpl` | Database-backed workflow with polling |
-| **O** | PostgreSQL | Word Mail Merge | Database plus batched Word generation |
+| **Z** | PostgreSQL or Azure SQL | `docxtpl` | Database workflow with polling for pending records |
+| **O** | PostgreSQL or Azure SQL | Word Mail Merge | Database workflow with batches of 100 records |
 
-The earlier v1 and v2 scripts established the proof of concept. V3 onward is now modular: versions choose a data source and a rendering engine rather than duplicating the full application.
+The earlier v1 and v2 scripts established the proof of concept. The five maintained versions share the same modules and select a source and rendering engine through configuration.
+
+In v3, X and Y, validation checks that data and a status column exist, selects pending records, and blocks generation when required fields are missing or file numbers are duplicated. Z and O have this application-level routine disabled and instead use the database's constraints and pending-record queries.
+
+## Optional Azure Data Factory ingestion
+
+The ADF pipeline reads Excel files from Azure Blob Storage and loads them into related Azure SQL tables. This extends the database workflow; Excel and PostgreSQL versions do not require ADF.
+
+The mapping data flow writes MHA records first, followed by applicant records. It uses file-number keys to insert new records or update matching records. Processing status and issue dates are excluded from the write mapping, preserving those fields on existing records.
+
+State and signing-authority reference data must already be loaded. The Python loader is a separate option: it populates all four tables and skips existing records, whereas ADF writes to the two tables below and can update matching rows.
+
+```text
+Excel in Blob Storage
+  ├─ MHA fields       → ministryofhomeaffairs (written first)
+  └─ Applicant fields → applicant             (written second)
+```
+
+Definitions are stored in [`adf/`](adf/) through Data Factory's Git integration. Saving definitions in Git and publishing them to a running factory are separate steps.
+
+| Definition | Purpose |
+| --- | --- |
+| [Pipeline](adf/pipeline/DocuMateADF.json) | Runs the mapping data flow |
+| [Data flow](adf/dataflow/DocumateDataFlow.json) | Selects columns and inserts or updates the two tables |
+| [Excel dataset](adf/dataset/Documate_Excel.json) | Reads the workbook from Blob Storage |
+| [Applicant dataset](adf/dataset/DS_Documate_DB.json) | Connects to the applicant table |
+| [MHA dataset](adf/dataset/DS_Documate_MHA.json) | Connects to the MHA table |
+| [Linked services](adf/linkedService/) | Blob Storage and Azure SQL connections |
+
+Reconfigure storage, database connections and authentication for your environment before running the pipeline. The repository also contains a self-hosted runtime definition for local-file access; the committed Excel source uses Blob Storage.
 
 ## Quick start
 
@@ -111,41 +150,6 @@ and your client IP allowed under the SQL server's Security -> Networking. Run
 
 Load the sample records with `python -m tools.seed_database --insert`; it writes
 to whichever backend is selected.
-
-## Data Factory
-
-The same load, without the Python. `tools/seed_database.py` reads the sample
-workbook and writes it into the database; the Data Factory pipeline does the
-same job as a no-code dataflow, so the ingestion step can run on a schedule
-rather than from a developer's machine.
-
-One source is split into two streams and upserted into two tables:
-
-```text
-Documate_Excel ─┬─ SelectMHA        → mha_file_number, mha_date → ministryofhomeaffairs
-                └─ SelectApplicants → the remaining columns      → applicant
-```
-
-Both sinks upsert rather than insert, so the pipeline can be re-run without
-duplicating rows. That is the same requirement `existing_keys()` solves in the
-Python loader, handled natively here.
-
-| Object | Purpose |
-| --- | --- |
-| `pipeline/DocuMateADF.json` | Single Execute Data Flow activity, 8-core General compute |
-| `dataflow/DocumateDataFlow.json` | Source, two selects, two upsert sinks |
-| `dataset/Documate_Excel.json` | The source workbook |
-| `dataset/DS_Documate_DB.json` | `applicant` sink |
-| `dataset/DS_Documate_MHA.json` | `ministryofhomeaffairs` sink |
-| `linkedService/` | Azure SQL and Blob storage connections |
-| `integrationRuntime/` | Self-hosted runtime for reading local files |
-
-Data Factory's Git integration publishes these definitions to `adf/`, so the
-JSON in this repository is the source of truth; edits in either place meet here.
-Credentials are not included - linked services hold references, not secrets.
-
-The linked services and integration runtime name a specific factory, so they
-must be repointed before the pipeline will run in a new subscription.
 
 ## Further reading
 
