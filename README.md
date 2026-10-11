@@ -23,8 +23,8 @@ The benchmark measures automated processing, not the full time needed for review
 
 ## How it works
 
-1. **Read pending records** from Excel, PostgreSQL or Azure SQL, depending on the selected version.
-2. **Apply the version's checks.** Excel versions run the five-stage validation routine. Database versions use SQL filtering and database constraints; they do not run that same routine.
+1. **Read pending records** from Excel, PostgreSQL or Azure SQL, depending on the selected version. The Excel versions read the sheet people type into and work the certificate fields out from it; the database versions read columns the database already holds separately.
+2. **Apply the version's checks.** Excel versions run the five-stage validation routine, which also checks the columns the certificate fields are built from, so a blank address line or an unreadable date is caught before it prints as a stray comma. Database versions use SQL filtering and database constraints; they do not run that same routine.
 3. **Generate certificates** in a combined Word document using Python template rendering or Word Mail Merge. A PDF copy is saved alongside it, converted from the finished Word file so the two always match. PDF export uses Word, so it needs Microsoft Word on Windows; where that is unavailable the Word document is still produced and only the PDF step is skipped.
 4. **Update processing status** for successfully generated records in the source.
 5. **Use the database for reporting**, without copying the records into a separate reporting spreadsheet.
@@ -98,6 +98,42 @@ python main.py v3
 ```
 
 The Excel versions (`v3`, `x`, `y`) run from the synthetic workbook in `files/data/`. The Mail Merge versions (`x`, `y`, `o`) require Microsoft Word on Windows. Generated documents go to `files/output/`, which is intentionally ignored by Git.
+
+Your own workbook needs a `Signing_Authority` column before a run will start; see [The Excel sheet](#the-excel-sheet).
+
+## The Excel sheet
+
+The Excel versions read the sheet people type into. DocuMate works the
+certificate fields out from it: names in capitals, `F` as `FEMALE`, the date
+and place of birth joined, and the registration number built from the serial
+and the year the record was registered.
+
+Those rules used to be Excel formulas on a second sheet that had to be
+maintained by hand. They are in [`sources/excel_format.py`](sources/excel_format.py)
+now, so the workbook holds data and the repository holds the rules. A workbook
+that still has a prepared sheet keeps working: point `DOCUMATE_SHEET_NAME` at
+it and it is used as it is, because the shape is recognised from the column
+names rather than the sheet name.
+
+The sheet needs `S No.`, `File No`, `Name`, `Sex`, `Date of birth`,
+`Place of birth`, both parents, `Registration date`, `ADD 1`, `MHA_File_No`,
+`MHA_Date` and `Signing_Authority`. `ADD 2` and `ADD 3` are optional and are
+left out of the address when empty. Dates are read day-first, so `03/04/2025`
+is the 3rd of April, and a format that cannot be read without guessing stops
+the run rather than being interpreted.
+
+**The signing authority is the one field DocuMate will not supply.** It names
+the officer on an official document, so it comes from the sheet or the run
+stops. Different records can name different officers.
+
+Two optional checks are off by default, because the right value differs
+between registers. Set either in `.env` and a record numbered elsewhere stops
+the run:
+
+```
+DOCUMATE_FILE_PREFIX=IND/MEL/
+DOCUMATE_MHA_PREFIX=
+```
 
 ## Modular structure
 
