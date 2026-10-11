@@ -63,12 +63,6 @@ The mapping data flow writes MHA records first, followed by applicant records. I
 
 State and signing-authority reference data must already be loaded. The Python loader is a separate option: it populates all four tables and skips existing records, whereas ADF writes to the two tables below and can update matching rows.
 
-```text
-Excel in Blob Storage
-  ├─ MHA fields       → ministryofhomeaffairs (written first)
-  └─ Applicant fields → applicant             (written second)
-```
-
 Definitions are stored in [`adf/`](adf/) through Data Factory's Git integration. Saving definitions in Git and publishing them to a running factory are separate steps.
 
 | Definition | Purpose |
