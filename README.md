@@ -14,7 +14,7 @@ DocuMate brings document generation and status tracking into one workflow, with 
 
 ## Impact
 
-- **Operational use:** helped the Dispatch team clear approximately 88% of a pending backlog in one week (480 of 540 cases).
+- **Operational use:** helped the Dispatch team clear approximately 88% of a pending backlog in one week.
 - **Benchmark:** DocuMate O processed 1,440 records in about 100 seconds. At the measured manual rate of 315 seconds per record, the equivalent manual workload is an estimated 126 hours.
 - **Processing control:** successfully generated records are marked as `PRINTED`, so subsequent runs can select pending work.
 - **Reporting:** Power BI can read the same PostgreSQL data used by DocuMate to report on processing volume and backlog.
@@ -25,7 +25,7 @@ The benchmark measures automated processing, not the full time needed for review
 
 1. **Read pending records** from Excel, PostgreSQL or Azure SQL, depending on the selected version.
 2. **Apply the version's checks.** Excel versions run the five-stage validation routine. Database versions use SQL filtering and database constraints; they do not run that same routine.
-3. **Generate certificates** in a combined Word document using Python template rendering or Word Mail Merge.
+3. **Generate certificates** in a combined Word document using Python template rendering or Word Mail Merge. A PDF copy is saved alongside it, converted from the finished Word file so the two always match. PDF export uses Word, so it needs Microsoft Word on Windows; where that is unavailable the Word document is still produced and only the PDF step is skipped.
 4. **Update processing status** for successfully generated records in the source.
 5. **Use the database for reporting**, without copying the records into a separate reporting spreadsheet.
 
