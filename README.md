@@ -55,6 +55,8 @@ In v3, X and Y, validation checks that data and a status column exist, selects p
 
 ## Optional Azure Data Factory ingestion
 
+![DocuMate Excel-to-database workflow: raw Excel entry, Blob Storage upload, ADF field selection and upserts into related Azure SQL tables](project/diagram/DocuMate-ADF-Ingestion-Workflow.png)
+
 The ADF pipeline reads Excel files from Azure Blob Storage and loads them into related Azure SQL tables. This extends the database workflow; Excel and PostgreSQL versions do not require ADF.
 
 The mapping data flow writes MHA records first, followed by applicant records. It uses file-number keys to insert new records or update matching records. Processing status and issue dates are excluded from the write mapping, preserving those fields on existing records.
