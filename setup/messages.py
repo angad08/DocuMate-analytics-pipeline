@@ -101,3 +101,78 @@ POLL_ENABLED = "DocuMate : auto-detection enabled."
 POLL_INTERVAL = "DocuMate : Checking for new records every {seconds} seconds...\n"
 POLL_STOPPED = "\nDocuMate : Auto-detection stopped by user."
 POLL_ERROR = "DocuMate : Auto-detection error - {error}"
+
+
+# ---------------------------------------------------------------------------
+# Raw-sheet checks
+# ---------------------------------------------------------------------------
+
+# A file number that does not start the way this register's numbers do.
+PREFIX_MISMATCH = (
+    "{count} record(s) have a {column} that does not start with "
+    "\"{prefix}\".\n\n"
+    "These look like they came from another register, or were typed wrong.\n"
+    "Nothing has been generated. Check the rows below, or change the\n"
+    "expected prefix in setup/config.py if the numbering has changed."
+)
+
+PREFIX_ROW = "    Row {row}: {value}"
+
+
+# The S No. column feeds the Registration No. printed on the certificate,
+# so a blank one cannot simply be ignored.
+SERIAL_ASK = (
+    "DocuMate : {count} row(s) have no S No.\n"
+    "           Number all {total} rows 1-{total} for this run only?\n"
+    "           The workbook will not be changed. (yes/no): "
+)
+
+SERIAL_RENUMBERED = (
+    "DocuMate : Numbered {total} rows 1-{total} for this run."
+)
+
+SERIAL_REFUSED = (
+    "{count} record(s) have no S No.\n\n"
+    "Nothing has been generated. Fill the S No. column in Excel, drag the\n"
+    "sequence down to the last record, and run again."
+)
+
+SERIAL_UNATTENDED = (
+    "{count} record(s) have no S No.\n\n"
+    "DocuMate is checking for new records on a timer, so it will not stop\n"
+    "to ask whether to number them. Fill the S No. column in Excel and the\n"
+    "next check will pick them up."
+)
+
+
+# The sheet itself is missing. The file used to be the only thing checked,
+# so a renamed sheet surfaced as a pandas error mid-run instead.
+EXCEL_NO_SHEET = (
+    "The workbook has no sheet called \"{sheet}\".\n\n"
+    "    {path}\n\n"
+    "Sheets in this file: {sheets}"
+)
+
+# A sheet that is nearly a raw entry sheet, but not quite. Almost always a
+# renamed heading. Worth stopping for: the alternative is a certificate
+# with half its fields blank, which looks finished and is not.
+RAW_SHEET_INCOMPLETE = (
+    "This looks like a raw entry sheet, but {found} of {total} expected\n"
+    "columns were found.\n\n"
+    "Missing: {missing}\n\n"
+    "Check the column headings in the sheet. Nothing has been generated."
+)
+
+
+# No signing authority anywhere. Worth its own message: the fix is one
+# setting, not an edit to every row, and the generic missing-fields warning
+# sends people into the spreadsheet looking for something that was never
+# supposed to be typed there.
+NO_SIGNING_AUTHORITY = (
+    "No signing authority found.\n\n"
+    "Every certificate names the officer who signs it. DocuMate will not\n"
+    "supply that name itself, so nothing has been generated.\n\n"
+    "Add a Signing_Authority column to the sheet and fill it in for the\n"
+    "records being printed. It is the one field that has to be chosen\n"
+    "rather than worked out, which is why it is the only one left manual."
+)

@@ -132,7 +132,11 @@ def output_folder():
 # Default workbook (in files/data) and sheet. Override with
 # DOCUMATE_EXCEL_PATH and DOCUMATE_SHEET_NAME in .env.
 EXCEL_FILENAME = "DocuMate_DataFrame.xlsx"
-SHEET_NAME = "DocuMateSRC"
+# The sheet to read. This is the raw entry sheet now, not a prepared one:
+# the formulas that used to build a second sheet live in
+# sources/excel_format.py instead. A workbook that still has a prepared
+# sheet works too - point DOCUMATE_SHEET_NAME at it and it is used as it is.
+SHEET_NAME = "Sheet1"
 
 
 def excel_path():
@@ -280,13 +284,57 @@ def database_settings():
 # ---------------------------------------------------------------------------
 
 # Columns allowed to be empty. Every other column must have a value.
-OPTIONAL_COLUMNS = ["STATUS", "Date_Printed", "Date_Issued"]
+#
+# ADD 2 and ADD 3 are in here because an address does not always need three
+# lines. Some applicants write the whole thing on the first line. ADD 1 is
+# not optional: an address has to start somewhere, and a blank first line
+# with a filled second one is a data-entry slip rather than a short address.
+OPTIONAL_COLUMNS = [
+    "STATUS", "Date_Printed", "Date_Issued",
+    "ADD 2", "ADD 3",
+]
+
+
+# How every date is written on a certificate, whatever shape it arrived in.
+DATE_FORMAT = "%d/%m/%Y"
+
+# Dates typed as text are read day-first, and only with these separators.
+# "03/04/2025" is the 3rd of April, never the 4th of March - the parser is
+# never allowed to guess, because a silent day/month swap is invisible on a
+# finished certificate.
+DATE_SEPARATORS = ["/", "-"]
+
+
+# File numbers are issued with a fixed prefix, so one that does not start
+# with it is either a typo or a record from somewhere else. Melbourne issues
+# AU...; the synthetic workbook in this repository uses IND/MEL/.
+#
+# Leave a prefix empty to turn its check off. MHA file numbers are empty by
+# default because the real ones carry no prefix at all - they are plain
+# twelve-digit numbers - while the synthetic ones use MHA/IND/.
+# Both are empty by default, which turns the check off. The prefix is not
+# the same everywhere - Melbourne issues AU..., the synthetic workbook here
+# uses IND/MEL/, and real MHA numbers carry no prefix at all - so there is
+# no sensible value to assume. Set the one your register uses:
+#
+#     DOCUMATE_FILE_PREFIX=AU
+#
+# and a record numbered by somewhere else stops the run instead of being
+# printed on your stationery.
+FILE_NUMBER_PREFIX = os.getenv("DOCUMATE_FILE_PREFIX", "")
+MHA_FILE_PREFIX = os.getenv("DOCUMATE_MHA_PREFIX", "")
 
 # The column used to find the same applicant entered twice.
 DUPLICATE_KEY = "File_Number"
 
 # The column records are sorted by, using its number ("123/2025" sorts as 123).
 SORT_COLUMN = "Serial"
+
+# The status a record starts with, used when a raw sheet has no STATUS
+# column yet. Anything that is not DONE_STATUS counts as pending, so the
+# exact wording matters only to whoever reads the sheet.
+PENDING_STATUS = "IN PROCESS"
+
 
 # The status that means a record is done. Any other value counts as pending.
 DONE_STATUS = "PRINTED"

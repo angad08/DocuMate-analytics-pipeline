@@ -44,7 +44,61 @@ def drop_finished(data):
     return data[status != config.DONE_STATUS]
 
 
-def check_records(data):
+def prefix_failures(data, column, prefix):
+    """
+    Rows whose value in `column` doesn't start with `prefix`.
+
+    An empty prefix turns the check off. Real MHA file numbers carry no
+    prefix at all - they are plain twelve-digit numbers - so that one is
+    off by default and only the file number is checked.
+    """
+    if not prefix or column not in data.columns:
+        return []
+
+    failures = []
+    for index, value in data[column].items():
+        text = "" if pd.isna(value) else str(value).strip()
+        if text and not text.startswith(prefix):
+            failures.append((index + 2, text))
+    return failures
+
+
+def serial_numbers_missing(data):
+    """Row numbers, as Excel shows them, where S No. is blank."""
+    if "Serial" not in data.columns:
+        return []
+
+    missing = []
+    for index, value in data["Serial"].items():
+        if pd.isna(value) or str(value).strip() == "":
+            missing.append(index + 2)
+    return missing
+
+
+def renumber_serials(data, year_column="Registration_date"):
+    """
+    Replace every Serial with its position in the sheet: 1/year .. n/year.
+
+    Counts the rows and numbers them straight through, so a column with
+    gaps in it comes out continuous. Row order is never changed - only the
+    number written against each row - and nothing is saved back to the
+    workbook, so the sheet still needs filling in properly afterwards.
+    """
+    data = data.copy()
+    serials = []
+
+    for position, (_, row) in enumerate(data.iterrows(), start=1):
+        year = ""
+        value = row.get(year_column)
+        if value is not None and not pd.isna(value) and hasattr(value, "year"):
+            year = str(value.year)
+        serials.append(str(position) + "/" + year if year else str(position))
+
+    data["Serial"] = serials
+    return data
+
+
+def check_records(data, serial_fixer=None):
     """
     Run the five checks and hand back the rows worth processing.
 
@@ -71,6 +125,28 @@ def check_records(data):
     data = drop_finished(data)
     if data.empty:
         raise CheckFailed(messages.NO_PENDING)
+
+    # --- 3b. Blank S No. on a raw entry sheet ---
+    # Only a raw sheet has this column, so a prepared one skips it. It runs
+    # after the pending filter, so a finished row with a gap in it cannot
+    # block a run. What to do about the gaps is the caller's decision: the
+    # pipeline asks when someone is watching and refuses when it is not.
+    missing_serials = serial_numbers_missing(data)
+    if missing_serials:
+        if serial_fixer is None:
+            raise CheckFailed(
+                messages.SERIAL_REFUSED.format(count=len(missing_serials)))
+        data = serial_fixer(data, missing_serials)
+
+    # --- 3c. Is there a signing authority at all? ---
+    # Checked on its own because the fix is a setting rather than a row
+    # edit, and because an officer's name on an official document is not
+    # something to supply from a default.
+    if "Signing_Authority_Name" in data.columns:
+        filled = data["Signing_Authority_Name"].apply(
+            lambda v: not (pd.isna(v) or str(v).strip() == ""))
+        if not filled.any():
+            raise CheckFailed(messages.NO_SIGNING_AUTHORITY)
 
     # --- 4. Are any must-have fields empty? ---
     # STATUS, Date_Printed and Date_Issued are allowed to be empty. Every
@@ -103,6 +179,24 @@ def check_records(data):
 
             raise CheckFailed(
                 messages.MISSING_FIELDS.format(count=len(bad_rows)),
+                lines,
+            )
+
+    # --- 4b. Do the numbers look like ours? ---
+    # Only runs on a raw sheet: a prepared one has no "File No" column, and
+    # a file number issued elsewhere is either a typo or a record that does
+    # not belong in this register. An empty prefix in config turns it off.
+    for column, prefix, label in [
+        ("File_Number", config.FILE_NUMBER_PREFIX, "File No"),
+        ("MHA_File_No", config.MHA_FILE_PREFIX, "MHA_File_No"),
+    ]:
+        failures = prefix_failures(data, column, prefix)
+        if failures:
+            lines = [messages.PREFIX_ROW.format(row=row, value=value)
+                     for row, value in failures[:20]]
+            raise CheckFailed(
+                messages.PREFIX_MISMATCH.format(
+                    count=len(failures), column=label, prefix=prefix),
                 lines,
             )
 

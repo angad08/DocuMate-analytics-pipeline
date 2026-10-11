@@ -15,6 +15,7 @@ from openpyxl import load_workbook
 
 from setup import config
 from setup import messages
+from sources import excel_format
 
 
 class ExcelSource:
@@ -30,13 +31,38 @@ class ExcelSource:
     # -- reading ------------------------------------------------------------
 
     def validate_source(self):
-        """Stop now if the file isn't there, rather than halfway through."""
+        """
+        Stop now if the file or the sheet isn't there.
+
+        The sheet used to go unchecked, so a renamed or deleted one only
+        showed up as a pandas error once the run was already under way.
+        """
         if not os.path.exists(self.path):
             raise FileNotFoundError(messages.SOURCE_MISSING.format(path=self.path))
 
+        # The sheet itself is checked in load_records(), where it is read.
+        # Opening the workbook twice would double the cost of a large file
+        # and report a locked file from the wrong place.
+
     def load_records(self):
-        """Read the sheet into a table."""
-        return pd.read_excel(self.path, sheet_name=self.sheet)
+        """
+        Read the sheet, and put it in certificate shape if it isn't already.
+
+        A sheet that was built with the old Excel formulas is used exactly
+        as it is. A raw entry sheet is converted here instead - see
+        sources/excel_format.py, which holds the rules those formulas used
+        to hold.
+        """
+        try:
+            frame = pd.read_excel(self.path, sheet_name=self.sheet)
+        except ValueError as error:
+            if "not found" not in str(error).lower():
+                raise
+            sheets = ", ".join(pd.ExcelFile(self.path).sheet_names)
+            raise ValueError(messages.EXCEL_NO_SHEET.format(
+                sheet=self.sheet, path=self.path, sheets=sheets))
+
+        return excel_format.prepare(frame)
 
     def close(self):
         """Nothing to close for a file. Here so both sources match."""

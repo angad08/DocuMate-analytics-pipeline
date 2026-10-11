@@ -121,6 +121,26 @@ class Pipeline:
         if not os.path.exists(template):
             raise FileNotFoundError(messages.TEMPLATE_MISSING.format(path=template))
 
+    def fix_serials(self, data, missing):
+        """
+        Decide what to do about blank S No. cells.
+
+        Asks when someone is at the keyboard, and numbers every row by its
+        position for that run only if they say yes - the workbook is never
+        written to, so the column still has to be filled in properly later.
+        When polling there is nobody to ask, so it stops and says why.
+        """
+        if getattr(self, "polling", False):
+            raise CheckFailed(messages.SERIAL_UNATTENDED.format(count=len(missing)))
+
+        if not ui.confirm(messages.SERIAL_ASK.format(
+                count=len(missing), total=len(data))):
+            raise CheckFailed(messages.SERIAL_REFUSED.format(count=len(missing)))
+
+        data = checks.renumber_serials(data)
+        print(messages.SERIAL_RENUMBERED.format(total=len(data)))
+        return data
+
     def check_records(self, data):
         """
         Run the v3 checks, if this version uses them.
@@ -131,7 +151,7 @@ class Pipeline:
         """
         try:
             if self.version.check_records:
-                return checks.check_records(data)
+                return checks.check_records(data, self.fix_serials)
 
             # Even with checks off, an empty result still stops the run.
             if data is None or data.empty:
@@ -177,6 +197,11 @@ class Pipeline:
     # -- running more than once ---------------------------------------------
 
     def start(self, poll=False, interval=300):
+        # Remembered so the checks know whether anyone is watching. A
+        # question asked inside a polling loop would wait for an answer
+        # that is never coming.
+        self.polling = poll
+
         """
         Run once, or keep checking for new records until you stop it.
 
