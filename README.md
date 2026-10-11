@@ -75,6 +75,7 @@ The Excel versions (`v3`, `x`, `y`) run from the synthetic workbook in `files/da
 ├── versions/        v3, X, Y, Z and O settings
 ├── setup/           paths, configuration, messages, UI
 ├── files/           synthetic data, templates, generated output
+├── adf/             Azure Data Factory pipeline, dataflow and datasets
 └── project/         documentation, schema and workflow diagram
 ```
 
@@ -110,6 +111,41 @@ and your client IP allowed under the SQL server's Security -> Networking. Run
 
 Load the sample records with `python -m tools.seed_database --insert`; it writes
 to whichever backend is selected.
+
+## Data Factory
+
+The same load, without the Python. `tools/seed_database.py` reads the sample
+workbook and writes it into the database; the Data Factory pipeline does the
+same job as a no-code dataflow, so the ingestion step can run on a schedule
+rather than from a developer's machine.
+
+One source is split into two streams and upserted into two tables:
+
+```text
+Documate_Excel ─┬─ SelectMHA        → mha_file_number, mha_date → ministryofhomeaffairs
+                └─ SelectApplicants → the remaining columns      → applicant
+```
+
+Both sinks upsert rather than insert, so the pipeline can be re-run without
+duplicating rows. That is the same requirement `existing_keys()` solves in the
+Python loader, handled natively here.
+
+| Object | Purpose |
+| --- | --- |
+| `pipeline/DocuMateADF.json` | Single Execute Data Flow activity, 8-core General compute |
+| `dataflow/DocumateDataFlow.json` | Source, two selects, two upsert sinks |
+| `dataset/Documate_Excel.json` | The source workbook |
+| `dataset/DS_Documate_DB.json` | `applicant` sink |
+| `dataset/DS_Documate_MHA.json` | `ministryofhomeaffairs` sink |
+| `linkedService/` | Azure SQL and Blob storage connections |
+| `integrationRuntime/` | Self-hosted runtime for reading local files |
+
+Data Factory's Git integration publishes these definitions to `adf/`, so the
+JSON in this repository is the source of truth; edits in either place meet here.
+Credentials are not included - linked services hold references, not secrets.
+
+The linked services and integration runtime name a specific factory, so they
+must be repointed before the pipeline will run in a new subscription.
 
 ## Further reading
 
