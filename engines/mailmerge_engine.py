@@ -49,6 +49,7 @@ import time
 import pandas as pd
 
 from setup import messages
+from setup import ui
 from engines import word_com
 from engines.output_paths import delete_temp_file
 from engines.output_paths import make_output_folder
@@ -222,6 +223,12 @@ class MailMergeEngine:
                     print(messages.MM_RANGE.format(first=first, last=last))
 
                 batch_path = self.run_one_batch(word, template, first, last, folder, number)
+
+                # Records finished, not batches done: on 1,440 records in
+                # batches of 250, "3 of 6" is a coarser answer than "750 of
+                # 1440" to the only question being asked - how much is left.
+                if len(batches) > 1:
+                    ui.progress_bar(last, total, messages.RECORD_PROGRESS)
                 batch_files.append(batch_path)
 
             # The template is no longer needed. Close it before joining so

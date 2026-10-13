@@ -10,10 +10,13 @@ code signalled the same thing by setting self.data = None and returning,
 which was easy to forget to look for.
 """
 
+import datetime
+
 import pandas as pd
 
 from setup import config
 from setup import messages
+from sources import excel_format
 
 
 class CheckFailed(Exception):
@@ -98,7 +101,94 @@ def renumber_serials(data, year_column="Registration_date"):
     return data
 
 
-def check_records(data, serial_fixer=None):
+def reads_as_date(value):
+    """
+    True when `value` is a date the certificate can actually print.
+
+    Delegates to excel_format.to_date rather than parsing again, so the check
+    and the converter can never disagree. A second parser here would eventually
+    accept something to_date rejects, the row would pass validation, and the
+    certificate would print an empty date — the failure this check exists to
+    stop.
+
+    Which separators count is config.DATE_SEPARATORS, currently "/" and "-".
+    Dots are excluded on purpose, so 8.11.26 is reported as a format problem
+    rather than silently read. Add "." to that list to accept it.
+
+    A time with no date is rejected separately: Excel hands back datetime.time
+    for a cell holding only 00:00, and to_date lets it through because a time
+    has .strftime — but it carries no day, so it cannot be a date of birth.
+    """
+    if isinstance(value, datetime.time) and not isinstance(value, datetime.datetime):
+        return False
+    return excel_format.to_date(value) is not None
+
+
+def field_problems(data, must_have, date_columns=()):
+    """
+    Every cell that would break a certificate, as (row, column, issue, value).
+
+    Two different problems, reported differently because the fix differs:
+
+      Missing       - the cell is empty; someone has to supply the value.
+      Date unreadable - the cell has something in it, but not a date this can
+                      print. Calling that "missing" sends the officer looking
+                      at a cell that is plainly not empty, which is what used
+                      to happen with 8.11.26.
+
+    `row` is the number shown in Excel: +2 because row 1 is the header and
+    pandas counts from 0.
+    """
+    problems = []
+    dates = {c for c in date_columns if c in data.columns}
+
+    # What the raw-sheet conversion could not read. Those cells are already
+    # None by now, so without this they would be reported as missing — which
+    # is exactly the complaint: 8.11.26 is not an empty cell.
+    unreadable = data.attrs.get("unreadable_dates", {})
+
+    for index, row in data.iterrows():
+        for column in must_have:
+            value = row[column]
+            blank = pd.isna(value) or str(value).strip() == ""
+            original = unreadable.get((index, column))
+            if blank and original:
+                problems.append((index + 2, column, "Date unreadable", original))
+            elif blank:
+                problems.append((index + 2, column, "Missing", ""))
+            elif column in dates and not reads_as_date(value):
+                problems.append((index + 2, column, "Date unreadable",
+                                 str(value).strip()))
+    return problems
+
+
+def problem_table(problems):
+    """
+    The problem list as aligned columns: Row, Field, Issue, Value.
+
+    A row per problem rather than per record, so a record with two different
+    problems says so on two lines instead of merging them into one phrase that
+    hides which field had which. Sorted by row, then field, so it reads in the
+    order the sheet does.
+
+    Returns a list of lines, which is what CheckFailed carries.
+    """
+    header = ("Row", "Field", "Issue", "Value")
+    body = sorted(((str(r), c, i, v) for r, c, i, v in problems),
+                  key=lambda t: (int(t[0]), t[1]))
+
+    widths = [max(len(row[n]) for row in (header, *body)) for n in range(4)]
+    rule = "  ".join("-" * w for w in widths)
+
+    def line(cells):
+        return "  ".join(text.ljust(w) for text, w in zip(cells, widths)).rstrip()
+
+    lines = [messages.MISSING_FIELDS_HEADER, line(header), rule]
+    lines += [line(row) for row in body]
+    return lines
+
+
+def check_records(data, serial_fixer=None, date_columns=()):
     """
     Run the five checks and hand back the rows worth processing.
 
@@ -158,28 +248,13 @@ def check_records(data, serial_fixer=None):
             must_have.append(column)
 
     if must_have:
-        bad_rows = data[is_blank(data[must_have]).any(axis=1)]
+        problems = field_problems(data, must_have, date_columns)
 
-        if not bad_rows.empty:
-            lines = [messages.MISSING_FIELDS_HEADER]
-
-            for index, row in bad_rows.iterrows():
-                empty_columns = []
-                for column in must_have:
-                    value = row[column]
-                    if pd.isna(value) or str(value).strip() == "":
-                        empty_columns.append(column)
-
-                # +2 because row 1 is the header and pandas counts from 0,
-                # so this prints the row number you see in Excel.
-                lines.append(messages.MISSING_FIELDS_ROW.format(
-                    row=index + 2,
-                    fields=", ".join(empty_columns),
-                ))
-
+        if problems:
+            rows_affected = len({row for row, _c, _i, _v in problems})
             raise CheckFailed(
-                messages.MISSING_FIELDS.format(count=len(bad_rows)),
-                lines,
+                messages.MISSING_FIELDS.format(count=rows_affected),
+                problem_table(problems),
             )
 
     # --- 4b. Do the numbers look like ours? ---
@@ -230,7 +305,28 @@ def format_dates(data, date_columns):
 
     for column in date_columns:
         if column in data.columns:
-            as_dates = pd.to_datetime(data[column], errors="coerce")
+            # Two passes, because one setting cannot read both shapes.
+            #
+            # Left to itself pandas falls back to dateutil, which reads
+            # 05/06/2026 month-first - the 6th of May instead of the 5th of
+            # June - and throws away 25/06/2026 entirely, there being no month
+            # 25. Forcing dayfirst=True instead breaks the other shape:
+            # 2026-01-05 then reads as the 1st of May.
+            #
+            # So ISO is parsed as ISO, and only what is left over is read
+            # day-first, which is the house rule everywhere else (to_date,
+            # config.DATE_SEPARATORS). A real date object matches the first
+            # pass and is untouched by either.
+            #
+            # It matters because a swapped date looks completely ordinary on a
+            # finished certificate - there is nothing to notice later.
+            column_values = data[column]
+            as_dates = pd.to_datetime(column_values, format="ISO8601",
+                                      errors="coerce")
+            if as_dates.isna().any():
+                day_first = pd.to_datetime(column_values.where(as_dates.isna()),
+                                           errors="coerce", dayfirst=True)
+                as_dates = as_dates.fillna(day_first)
             data[column] = as_dates.dt.strftime("%d/%m/%Y").fillna("")
 
     return data

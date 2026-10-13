@@ -151,7 +151,12 @@ class Pipeline:
         """
         try:
             if self.version.check_records:
-                return checks.check_records(data, self.fix_serials)
+                # The date columns go in so an unreadable date is reported as a
+                # format problem rather than a missing value: 8.11.26 is plainly
+                # not an empty cell, and saying "missing" sends the officer to
+                # look at one.
+                return checks.check_records(data, self.fix_serials,
+                                            self.version.date_columns or ())
 
             # Even with checks off, an empty result still stops the run.
             if data is None or data.empty:

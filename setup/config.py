@@ -302,6 +302,12 @@ DATE_FORMAT = "%d/%m/%Y"
 # "03/04/2025" is the 3rd of April, never the 4th of March - the parser is
 # never allowed to guess, because a silent day/month swap is invisible on a
 # finished certificate.
+#
+# "." is deliberately NOT here. Operators do type 8.11.26, and accepting it
+# would read correctly - but it would also stop the report mentioning it, and
+# the sheet would keep collecting dates in whichever shape each person prefers.
+# Rejecting it puts the row in front of someone, who fixes the source. Add "."
+# here if you would rather the tool took it quietly.
 DATE_SEPARATORS = ["/", "-"]
 
 

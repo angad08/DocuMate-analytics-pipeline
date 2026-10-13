@@ -40,8 +40,10 @@ from setup import messages
 # finished column is called, so both are accepted.
 RAW_ALIASES = {
     "S No.": ["S No.", "Serial"],
+    # "Sighning_Authority" is how the live register and its templates have
+    # always spelt it.
     "Signing_Authority_Name": ["Signing_Authority_Name", "Signing_Authority",
-                               "Signing Authority"],
+                               "Signing Authority", "Sighning_Authority"],
 }
 
 RAW_COLUMNS = {
@@ -327,7 +329,26 @@ def transform(frame):
         )
     ]
 
-    prepared["Registration_date"] = [to_date(v) for v in column["registration_date"]]
+    # Remember what could not be read, before the value is gone.
+    #
+    # to_date turns an unreadable cell into None, which from here on is
+    # indistinguishable from a cell that was always empty - so the checks
+    # reported "8.11.26" as a missing value and sent the officer to look at a
+    # cell with something plainly in it. Recording the original text here is
+    # what lets them say "date unreadable" and show it.
+    unreadable = {}
+
+    def dated(values, column_name):
+        out = []
+        for position, value in enumerate(values):
+            converted = to_date(value)
+            if converted is None and as_text(value):
+                unreadable[(position, column_name)] = as_text(value)
+            out.append(converted)
+        return out
+
+    prepared["Registration_date"] = dated(column["registration_date"],
+                                          "Registration_date")
 
     prepared["MHA_File_And_date"] = [
         joined(as_text(number), as_date(date, "%d/%m/%y"))
@@ -362,13 +383,25 @@ def transform(frame):
                 as_text(value).upper() or None for value in prepared[name]
             ]
 
+    # A template is built against the heading the sheet uses, so the signing
+    # authority is also carried under that heading when it is not the
+    # standard one. Otherwise the field is read but prints blank.
+    authority = actual_header(frame, "Signing_Authority_Name")
+    if authority is not None and authority not in prepared.columns:
+        prepared[authority] = prepared["Signing_Authority_Name"]
+
     for header in CARRIED_COLUMNS:
         header = actual_header(frame, header) or header
         if header in ("Date of birth", "MHA_Date"):
-            prepared[header] = [to_date(v) for v in frame[header]]
+            prepared[header] = dated(frame[header], header)
         else:
             prepared[header] = [as_text(v) for v in frame[header]]
 
+    # Carried on the frame so the checks can tell an unreadable date from an
+    # empty cell. attrs survives the copying and row filtering the pipeline
+    # does, and the keys are positions in this frame, which the filtering
+    # preserves as the index.
+    prepared.attrs["unreadable_dates"] = unreadable
     return prepared
 
 

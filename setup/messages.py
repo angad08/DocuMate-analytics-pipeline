@@ -21,7 +21,9 @@ SEARCHING = "DocuMate : Searching for new records..."
 FOUND = "DocuMate : Found {count} new records to populate.\n"
 ENGINE_START = "DocuMate : {engine} starting...\n"
 GENERATING = "DocuMate : Generating and merging {count} documents...\n"
-RECORD_PROGRESS = "DocuMate : Processed record {done}/{total}"
+# A bar rather than a bare counter: on 1,440 records a number alone says
+# nothing about how much is left. {bar} is filled in by setup.ui.progress_bar.
+RECORD_PROGRESS = "DocuMate : [{bar}] {percent:3d}%  {done}/{total} records"
 CREATING_FOLDER = "\nDocuMate : Output folder '{folder}' does not exist. Creating it..."
 SAVED = "\nDocuMate : Generated and merged {count} documents (in Serial order) and saved in:\n{path}"
 MERGE_DONE = "\nDocuMate : Generated and merged {count} documents"
@@ -61,7 +63,9 @@ NOTHING_TO_UPDATE = "DocuMate : No data to update."
 NO_DATA = "Found no records to populate.\n\n" + SIGNATURE
 NO_STATUS_COLUMN = "'STATUS' column not found. Please check the source file.\n\n" + SIGNATURE
 NO_PENDING = "No records found with status 'In Process'.\n\n" + SIGNATURE
-MISSING_FIELDS_HEADER = "\nDocuMate : Records with missing mandatory fields detected:\n"
+MISSING_FIELDS_HEADER = "\nDocuMate : Rows that need fixing before documents can be made:\n"
+# Superseded by the table in flow/checks.problem_table; kept so anything still
+# importing it does not break.
 MISSING_FIELDS_ROW = "Row {row} | Missing fields: {fields}"
 MISSING_FIELDS = (
     "Warning: Found {count} record(s) with missing values.\n"

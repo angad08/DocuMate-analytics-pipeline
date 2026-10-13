@@ -9,6 +9,7 @@ database themselves.
 Run them with:   python -m pytest tests -q
 """
 
+import datetime
 import os
 import sys
 
@@ -111,7 +112,79 @@ def test_the_missing_field_report_uses_excel_row_numbers():
     with pytest.raises(CheckFailed) as caught:
         checks.check_records(sheet(Name=["ASHA", ""]))
 
-    assert "Row 3" in "\n".join(caught.value.extra_lines)
+    report = caught.value.extra_lines
+    assert any(line.startswith("3 ") and "Name" in line for line in report)
+    assert any(line.startswith("Row") and "Field" in line for line in report)
+
+
+def test_an_unreadable_date_is_reported_as_a_format_problem_not_as_missing():
+    """
+    A cell with something in it is not an empty cell. Calling it missing sent
+    the officer to look at a cell that plainly had text in it.
+    """
+    problems = checks.field_problems(
+        sheet(Registration_date=["05/01/2026", "8.11.26"]),
+        ["Registration_date"], ["Registration_date"])
+
+    assert [(row, issue, value) for row, _c, issue, value in problems] == \
+           [(3, "Date unreadable", "8.11.26")]
+
+
+def test_a_dotted_date_is_reported_rather_than_quietly_accepted():
+    """
+    8.11.26 could be read day-first without ambiguity. It is refused anyway, so
+    the row reaches someone who corrects the sheet instead of the sheet
+    collecting a different date shape from every person who types in it.
+    Adding "." to config.DATE_SEPARATORS reverses this on purpose.
+    """
+    from sources import excel_format
+    assert excel_format.to_date("8.11.26") is None
+    assert excel_format.to_date("05/01/2026") == datetime.date(2026, 1, 5)
+    assert excel_format.to_date("5-1-26") == datetime.date(2026, 1, 5)
+
+
+def test_a_time_with_no_date_is_not_accepted_as_a_date():
+    """Excel gives datetime.time for a cell holding only 00:00 — no day in it."""
+    import datetime as dt
+    assert not checks.reads_as_date(dt.time(0, 0))
+    assert checks.reads_as_date(dt.datetime(2026, 1, 5))
+
+
+def test_the_date_check_agrees_with_the_converter():
+    """
+    Whatever to_date accepts, the check must accept, or a row passes validation
+    and then prints an empty date on the certificate.
+    """
+    from sources import excel_format
+    for value in ["05/01/2026", "5-1-26", "8.11.26", "nonsense", ""]:
+        assert checks.reads_as_date(value) == (excel_format.to_date(value) is not None)
+
+
+def test_a_date_the_raw_conversion_could_not_read_is_not_called_missing():
+    """
+    The raw-sheet path converts dates before the checks run, so an unreadable
+    one is already None by then and used to be reported as missing. What it
+    said is remembered on the frame so the report can show it.
+    """
+    data = sheet(Registration_date=["05/01/2026", None])
+    data.attrs["unreadable_dates"] = {(1, "Registration_date"): "8.11.26"}
+
+    problems = checks.field_problems(data, ["Registration_date"],
+                                     ["Registration_date"])
+    assert [(row, issue, value) for row, _c, issue, value in problems] == \
+           [(3, "Date unreadable", "8.11.26")]
+
+
+def test_the_record_of_unreadable_dates_survives_filtering_out_finished_rows():
+    """If it did not, the real run would still report those cells as missing."""
+    data = sheet()
+    data.attrs["unreadable_dates"] = {(1, "Registration_date"): "8.11.26"}
+    assert checks.drop_finished(data).attrs.get("unreadable_dates")
+
+
+def test_a_blank_cell_is_still_reported_as_missing():
+    problems = checks.field_problems(sheet(Name=["ASHA", ""]), ["Name"], [])
+    assert [(row, issue) for row, _c, issue, _v in problems] == [(3, "Missing")]
 
 
 # ---------------------------------------------------------------------------

@@ -246,3 +246,31 @@ def test_excel_warns_when_a_serial_is_missing(tmp_path, capsys):
 
     assert "Expected to mark 2 rows but marked 1" in capsys.readouterr().out
     assert load_workbook(path)["Records"]["B2"].value == "PRINTED"
+
+
+def test_excel_marks_a_raw_sheet_with_the_register_headings(tmp_path):
+    path = tmp_path / "records.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Records"
+    sheet.append(["S No.", "Name", "Date of birth", "Place of birth", "File No",
+                  "Sex", "Name of Father", "Name of Mother", "Registration date",
+                  "ADD 1", "ADD 2", "ADD 3", "MHA_File_No", "MHA_Date",
+                  "Sighning_Authority", "STATUS"])
+    for number in (1, 2):
+        sheet.append([number, "Asha", "01/02/2026", "Melbourne", "F" + str(number),
+                      "F", "Ravi", "Mira", "03/04/2026", "1 High St", None, None,
+                      "123", "05/04/2026", "A Officer, Consul", None])
+    workbook.save(path)
+
+    source = ExcelSource(str(path), "Records")
+    data = source.load_records()
+    assert list(data["Serial"]) == ["1", "2"]
+    assert list(data["Sighning_Authority"]) == ["A OFFICER, CONSUL"] * 2
+    assert list(data["Signing_Authority_Name"]) == ["A OFFICER, CONSUL"] * 2
+
+    source.mark_printed(data.iloc[[0]])
+
+    sheet = load_workbook(path)["Records"]
+    assert sheet["P2"].value == "PRINTED"
+    assert sheet["P3"].value is None

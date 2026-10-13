@@ -20,6 +20,22 @@ DocuMate - run any version from here.
 import argparse
 import multiprocessing
 import sys
+import warnings
+
+# docxcompose still imports pkg_resources, which setuptools now warns about on
+# every run. It is their dependency to fix, there is nothing to do about it
+# here, and an officer watching a certificate run should not be shown a
+# warning they cannot act on.
+#
+# Matched on message and module rather than silencing UserWarning outright, so
+# a warning worth reading still gets through.
+warnings.filterwarnings(
+    "ignore",
+    message=r"pkg_resources is deprecated.*",
+    category=UserWarning,
+    module=r"docxcompose\..*",
+)
+
 import versions
 
 

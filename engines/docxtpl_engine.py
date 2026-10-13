@@ -121,7 +121,7 @@ class DocxtplEngine:
                     composer.append(document)
 
                 successful.append(number)
-                ui.progress(messages.RECORD_PROGRESS.format(done=number, total=total))
+                ui.progress_bar(number, total, messages.RECORD_PROGRESS)
 
         if merged is None:
             print(messages.NOTHING_TO_MERGE)

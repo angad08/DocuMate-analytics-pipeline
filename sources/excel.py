@@ -92,8 +92,19 @@ class ExcelSource:
 
             if "STATUS" not in columns:
                 raise ValueError(messages.EXCEL_NO_STATUS_COLUMN)
-            if "Serial" not in columns:
+
+            # A raw entry sheet may call the column "S No.", and holds the
+            # bare number: the "/year" was added on read, from the
+            # registration date. It is rebuilt the same way here so the two
+            # can be matched.
+            serial_name = None
+            for name in excel_format.RAW_ALIASES["S No."]:
+                if name in columns:
+                    serial_name = name
+            if serial_name is None:
                 raise ValueError(messages.EXCEL_NO_SERIAL_COLUMN)
+            registration_column = columns.get(
+                excel_format.RAW_COLUMNS["registration_date"])
 
             # Older sheets don't have Date_Printed, so add it.
             if "Date_Printed" not in columns:
@@ -103,13 +114,19 @@ class ExcelSource:
 
             status_column = columns["STATUS"]
             date_column = columns["Date_Printed"]
-            serial_column = columns["Serial"]
+            serial_column = columns[serial_name]
             serials = set(data["Serial"])
             today = datetime.now().strftime("%d/%m/%Y")
             marked = 0
 
             for row in range(2, sheet.max_row + 1):
-                if shown.cell(row=row, column=serial_column).value not in serials:
+                serial = shown.cell(row=row, column=serial_column).value
+                if serial not in serials and registration_column:
+                    serial = excel_format.serial_for(
+                        serial,
+                        shown.cell(row=row, column=registration_column).value,
+                    )
+                if serial not in serials:
                     continue
                 status = sheet.cell(row=row, column=status_column).value
                 if status is None:
