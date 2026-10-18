@@ -54,6 +54,9 @@ def test_failed_render_marks_only_successful_records(tmp_path, monkeypatch, caps
     monkeypatch.setattr("concurrent.futures.ProcessPoolExecutor", Workers)
     questions = []
     monkeypatch.setattr(ui, "confirm", lambda question: questions.append(question) or True)
+    # No printer is chosen, so the run stops before printing. Printing has
+    # its own tests; this one is about which records get marked.
+    monkeypatch.setattr(ui, "choose", lambda *args, **kwargs: None)
     notifications = []
     monkeypatch.setattr(ui, "notify", notifications.append)
 
@@ -72,8 +75,9 @@ def test_failed_render_marks_only_successful_records(tmp_path, monkeypatch, caps
                 "Name": ["Asha", "Bhavik", "Chris"],
             })
 
-        def mark_printed(self, data):
+        def mark_status(self, data, status):
             self.updated = list(data["Serial"])
+            self.status = status
 
     source = Source()
     pipeline = Pipeline(version(tmp_path), source, DocxtplEngine("unused"))
@@ -160,7 +164,7 @@ def test_all_failed_records_skip_status_update(tmp_path, monkeypatch):
         def load_records(self):
             return pd.DataFrame({"Serial": ["1/2026"]})
 
-        def mark_printed(self, data):
+        def mark_status(self, data, status):
             raise AssertionError("status update should be skipped")
 
     class Engine:

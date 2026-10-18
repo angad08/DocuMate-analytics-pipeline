@@ -40,11 +40,16 @@ def drop_finished(data):
     Keep only the rows that still need doing.
 
     Blank, "IN PROCESS", or anything else all count as pending. Only an
-    exact match on PRINTED is dropped, ignoring case and spaces. That is
-    why a half-typed status never causes a record to be skipped quietly.
+    exact match on COMPLETED or PRINTED is dropped, ignoring case and
+    spaces. That is why a half-typed status never causes a record to be
+    skipped quietly.
+
+    COMPLETED is dropped as well as PRINTED because its document has
+    already been generated. Treating it as pending would build the same
+    certificate again on the next run.
     """
     status = data["STATUS"].fillna("").astype(str).str.strip().str.upper()
-    return data[status != config.DONE_STATUS]
+    return data[~status.isin(config.FINISHED_STATUSES)]
 
 
 def prefix_failures(data, column, prefix):

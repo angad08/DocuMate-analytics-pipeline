@@ -47,7 +47,7 @@ PENDING_APPLICANTS = """
             ON a.mha_file_number = b.mha_file_number
         LEFT JOIN {schema}ib_authority ib
             ON a.ib_staff_authority_id = ib.ib_staff_authority_id
-    WHERE UPPER(COALESCE(a.status, '')) <> 'PRINTED'
+    WHERE UPPER(COALESCE(a.status, '')) NOT IN ('COMPLETED', 'PRINTED')
     ORDER BY a.serial;
 """
 
@@ -69,7 +69,7 @@ ADD_DATE_ISSUED_COLUMN = "ALTER TABLE {schema}applicant ADD COLUMN date_issued D
 # change their date_issued.
 MARK_PRINTED = """
     UPDATE {schema}applicant
-    SET status = 'PRINTED',
+    SET status = %s,
         date_issued = %s
     WHERE serial = ANY(%s)
       AND COALESCE(UPPER(status), '') <> 'PRINTED';
@@ -87,6 +87,6 @@ def mark_printed_sql(count):
     return MARK_PRINTED
 
 
-def mark_printed_params(today, serials):
-    """Return the UPDATE's values: (date, [serial, serial, ...])."""
-    return (today, list(serials))
+def mark_printed_params(today, serials, status):
+    """Return the UPDATE's values: (status, date, [serial, serial, ...])."""
+    return (status, today, list(serials))

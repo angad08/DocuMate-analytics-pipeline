@@ -431,16 +431,21 @@ def test_each_dialect_builds_an_update_its_own_driver_can_run():
     today = datetime.date(2026, 1, 2)
     serials = [1, 2, 3]
 
-    # PostgreSQL: one array parameter, so two placeholders whatever the size.
-    pg_sql = queries_postgres.mark_printed_sql(len(serials))
-    assert pg_sql.count("%s") == 2
-    assert queries_postgres.mark_printed_params(today, serials) == (today, serials)
+    status = config.DONE_STATUS
 
-    # Azure SQL: one ? per serial, plus one for the date.
+    # PostgreSQL: one array parameter for the serials, so three placeholders
+    # whatever the batch size - status, date, and the array.
+    pg_sql = queries_postgres.mark_printed_sql(len(serials))
+    assert pg_sql.count("%s") == 3
+    assert queries_postgres.mark_printed_params(today, serials, status) == (
+        status, today, serials)
+
+    # Azure SQL: one ? per serial, plus one each for the status and the date.
     tsql = queries_tsql.mark_printed_sql(len(serials))
-    assert tsql.count("?") == len(serials) + 1
+    assert tsql.count("?") == len(serials) + 2
     assert "IN (?, ?, ?)" in tsql
-    assert queries_tsql.mark_printed_params(today, serials) == [today] + serials
+    assert queries_tsql.mark_printed_params(today, serials, status) == (
+        [status, today] + serials)
 
 
 def test_tsql_refuses_a_batch_over_the_parameter_limit():

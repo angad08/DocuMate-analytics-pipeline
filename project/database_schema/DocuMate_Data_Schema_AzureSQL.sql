@@ -130,7 +130,7 @@ IF NOT EXISTS (
 )
 ALTER TABLE applicant
 ADD CONSTRAINT chk_applicant_status
-CHECK (UPPER(status) IN ('IN PROCESS', 'PRINTED'));
+CHECK (UPPER(status) IN ('IN PROCESS', 'COMPLETED', 'PRINTED'));
 GO
 
 

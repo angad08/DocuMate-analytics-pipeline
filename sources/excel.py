@@ -71,6 +71,10 @@ class ExcelSource:
     # -- writing back -------------------------------------------------------
 
     def mark_printed(self, data):
+        """Mark these records as PRINTED. Kept for callers that want it."""
+        return self.mark_status(data, config.DONE_STATUS)
+
+    def mark_status(self, data, status_value):
         """
         Mark only rows whose Serial is in data as PRINTED, and stamp today's date.
         """
@@ -132,10 +136,14 @@ class ExcelSource:
                 if status is None:
                     status = ""
 
-                if str(status).strip().upper() == config.DONE_STATUS:
+                # Never move a record backwards. A row already PRINTED is
+                # finished, and a row already at the status being written
+                # has nothing to change.
+                current = str(status).strip().upper()
+                if current == config.DONE_STATUS or current == status_value:
                     continue
 
-                sheet.cell(row=row, column=status_column, value=config.DONE_STATUS)
+                sheet.cell(row=row, column=status_column, value=status_value)
                 sheet.cell(row=row, column=date_column, value=today)
                 marked = marked + 1
 

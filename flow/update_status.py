@@ -13,13 +13,14 @@ hands the records over.
 
 import time
 
+from setup import config
 from setup import messages
 from setup import ui
 
 
 def update_status(sink, data, count, failed=0):
     """
-    Ask whether to mark these records as PRINTED, and do it if yes.
+    Ask whether to mark these records as COMPLETED, and do it if yes.
 
     sink   - where the statuses get written (the Excel sheet, or the database)
     data   - the records that were just turned into documents
@@ -42,7 +43,10 @@ def update_status(sink, data, count, failed=0):
     print(messages.UPDATING.format(target=sink.label))
     started = time.time()
 
-    sink.mark_printed(data)
+    # COMPLETED, not PRINTED: the documents exist, but nothing has been
+    # sent to a printer yet. Printing is offered next and promotes these to
+    # PRINTED if it happens.
+    sink.mark_status(data, config.COMPLETED_STATUS)
 
     return messages.UPDATE_SUFFIX.format(
         target=sink.label,

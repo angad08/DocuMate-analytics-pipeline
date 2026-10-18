@@ -245,6 +245,10 @@ class DatabaseSource:
     # -- writing back -------------------------------------------------------
 
     def mark_printed(self, data):
+        """Mark these records as PRINTED. Kept for callers that want it."""
+        return self.mark_status(data, config.DONE_STATUS)
+
+    def mark_status(self, data, status_value):
         """
         Mark the records from this run as PRINTED, with today's date.
 
@@ -287,7 +291,7 @@ class DatabaseSource:
                 # this batch size (see mark_printed_sql in each module).
                 self.cursor.execute(
                     self.sql(self.queries.mark_printed_sql(len(batch))),
-                    self.queries.mark_printed_params(today, batch),
+                    self.queries.mark_printed_params(today, batch, status_value),
                 )
 
                 updated = updated + self.cursor.rowcount

@@ -342,8 +342,28 @@ SORT_COLUMN = "Serial"
 PENDING_STATUS = "IN PROCESS"
 
 
-# The status that means a record is done. Any other value counts as pending.
+# The status a record reaches once its document has been generated, but
+# before anything has been sent to a printer. A run that generates and is
+# not printed leaves records here, which says what actually happened.
+COMPLETED_STATUS = "COMPLETED"
+
+# The status that means a certificate has been sent to a printer.
 DONE_STATUS = "PRINTED"
+
+# Statuses that mean a record needs no more work. Anything else is pending,
+# including a blank cell and a half-typed status, so a record is never
+# skipped quietly. COMPLETED is in here because its document already
+# exists - leaving it out would regenerate it on the next run.
+FINISHED_STATUSES = [COMPLETED_STATUS, DONE_STATUS]
+
+
+# Printers that write a file instead of putting ink on paper. They are
+# recognised by their port: Windows gives Print to PDF and XPS the
+# PORTPROMPT: port, OneNote nul:, and Fax SHRFAX:. Worth naming, because
+# "Microsoft Print to PDF" is the default printer on a lot of machines and
+# sending a hundred certificates to it produces nothing and looks like it
+# worked.
+VIRTUAL_PRINTER_PORTS = ["PORTPROMPT:", "NUL:", "SHRFAX:"]
 
 # Add the current year to every record, so templates don't need it typed in.
 # Set to False to turn it off.
@@ -352,3 +372,9 @@ INJECT_YEAR = True
 # Show Windows popup messages. Set DOCUMATE_POPUPS=0 to print to the console
 # instead. Popups are turned off automatically when not on Windows.
 USE_POPUPS = os.getenv("DOCUMATE_POPUPS", "1") != "0"
+
+
+# Offer to print after generating. Set DOCUMATE_PRINTING=0 for an office
+# that prints the merged file by hand, or for an unattended run where there
+# is nobody to answer the question.
+OFFER_PRINTING = os.getenv("DOCUMATE_PRINTING", "1") != "0"
