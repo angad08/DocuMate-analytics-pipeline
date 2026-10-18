@@ -25,9 +25,10 @@ GENERATING = "DocuMate : Generating and merging {count} documents...\n"
 # nothing about how much is left. {bar} is filled in by setup.ui.progress_bar.
 RECORD_PROGRESS = "DocuMate : [{bar}] {percent:3d}%  {done}/{total} records"
 CREATING_FOLDER = "\nDocuMate : Output folder '{folder}' does not exist. Creating it..."
-SAVED = "\nDocuMate : Generated and merged {count} documents (in Serial order) and saved in:\n{path}"
-MERGE_DONE = "\nDocuMate : Generated and merged {count} documents"
-MERGE_TIME = "DocuMate : {engine} finished in {seconds:.2f} seconds.\n"
+SAVED = (
+    "\nDocuMate : Generated and merged {count} documents (in Serial order)"
+    " in {seconds:.2f} seconds and saved in:\n{path}"
+)
 NOTHING_TO_MERGE = "DocuMate : No records found for merging."
 
 # --- PDF copy --------------------------------------------------------------
@@ -45,8 +46,8 @@ MM_BATCH = "DocuMate : Batch {number} of {total} - records {first} to {last}"
 MM_ERROR = "\nDocuMate : Mail Merge error - {error}"
 CLEANUP_FAILED = "DocuMate : Could not delete temp file: {path}"
 
-# --- Marking records as printed --------------------------------------------
-ASK_UPDATE = "DocuMate : Mark {count} as printed?{failed} (yes/no): "
+# --- Marking records as completed --------------------------------------------
+ASK_UPDATE = "DocuMate : Mark {count} as completed?{failed} (yes/no): "
 EXCEL_NO_SERIAL_COLUMN = "DocuMate : Serial column not found - cannot update Excel."
 UPDATING = "\nDocuMate : Updating {target} statuses...\n"
 UPDATE_SUFFIX = " and updated {target} in {seconds:.2f} seconds"
@@ -92,7 +93,7 @@ SUCCESS = (
 RENDER_FAILURES = "{failed} record(s) failed and were left pending - see the console for details.\n"
 STATUS_UPDATE_FAILED = (
     "Documents were created and saved to {path}, but {source} was NOT updated: {reason}.\n"
-    "Close the file and mark these rows as PRINTED yourself, or they will be generated again on the next run."
+    "Close the file and mark these rows as COMPLETED yourself, or they will be generated again on the next run."
 )
 FILE_LOCKED = (
     "I cannot start because a file I need is open.\n"

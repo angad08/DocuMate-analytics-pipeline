@@ -51,6 +51,9 @@ class DocxtplEngine:
         # of the time it reports for generating.
         self.pdf_seconds = 0.0
 
+        # How long generating took, without the PDF.
+        self.generate_seconds = 0.0
+
     def add_page_break(self, document):
         """Add a page break at the end of the document."""
         from docx.oxml import OxmlElement
@@ -78,6 +81,7 @@ class DocxtplEngine:
         submitted, not the order the workers finish, so the output always
         follows the Serial order of the input.
         """
+        started = time.time()
         from concurrent.futures import ProcessPoolExecutor
         from docx import Document
         from docxcompose.composer import Composer
@@ -136,7 +140,14 @@ class DocxtplEngine:
         make_output_folder(os.path.dirname(output_path))
         composer.save(output_path)
 
-        print(messages.SAVED.format(count=total - failed, path=output_path))
+        # Measured here, before the PDF: this is how long the certificates
+        # took, which is the number anyone comparing engines wants.
+        self.generate_seconds = time.time() - started
+        print(messages.SAVED.format(
+            count=total - failed,
+            seconds=self.generate_seconds,
+            path=output_path,
+        ))
 
         # Step 5: PDF copy, made from the saved .docx.
         #

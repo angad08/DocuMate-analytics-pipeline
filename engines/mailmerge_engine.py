@@ -132,6 +132,9 @@ class MailMergeEngine:
         # of the time it reports for generating.
         self.pdf_seconds = 0.0
 
+        # How long generating took, without the PDF.
+        self.generate_seconds = 0.0
+
     def generate(self, records, output_path):
         """
         Merge every record and save one document. The steps are listed at
@@ -142,6 +145,7 @@ class MailMergeEngine:
 
         Returns the 1-based positions of records included in the document.
         """
+        started = time.time()
 
         if not records:
             print(messages.NOTHING_TO_MERGE)
@@ -243,7 +247,14 @@ class MailMergeEngine:
             # Step 5: join the batches into the final file.
             combined = self.join_batches(word, batch_files, output_path)
 
-            print(messages.SAVED.format(count=total, path=output_path))
+            # Measured before the PDF, which Word exports from the document
+            # it still has open and which is not part of generating.
+            self.generate_seconds = time.time() - started
+            print(messages.SAVED.format(
+                count=total,
+                seconds=self.generate_seconds,
+                path=output_path,
+            ))
 
             # Step 6: PDF copy, using the Word that is already running.
             # combined is None when there was only one batch, because that

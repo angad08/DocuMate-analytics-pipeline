@@ -85,7 +85,7 @@ def test_failed_render_marks_only_successful_records(tmp_path, monkeypatch, caps
     pipeline.run()
 
     assert source.updated == ["1/2026", "3/2026"]
-    assert "Mark 2 as printed? (1 failed)" in questions[0]
+    assert "Mark 2 as completed? (1 failed)" in questions[0]
     assert "record 2 (Serial: 2/2026, Name: Bhavik)" in capsys.readouterr().out
     assert "1 record(s) failed and were left pending" in notifications[0]
 
@@ -150,7 +150,7 @@ def test_locked_workbook_has_no_success_message(tmp_path, monkeypatch):
     assert "Documents were created and saved to" in messages[0]
     assert "test_BIRTH_REGISTRATION_" in messages[0]
     assert "Excel was NOT updated: workbook is locked" in messages[0]
-    assert "mark these rows as PRINTED yourself" in messages[0]
+    assert "mark these rows as COMPLETED yourself" in messages[0]
     assert len(list(tmp_path.glob("*.docx"))) == 1
 
 

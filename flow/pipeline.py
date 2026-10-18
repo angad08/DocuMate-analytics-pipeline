@@ -80,8 +80,9 @@ class Pipeline:
             printed_count = len(printed_data)
             failed_count = count - printed_count
             try:
-                update_text = update_status(self.sink, printed_data, printed_count,
-                                            failed=failed_count)
+                update_text, write_seconds = update_status(
+                    self.sink, printed_data, printed_count,
+                    failed=failed_count)
             except Exception as error:
                 ui.notify(messages.STATUS_UPDATE_FAILED.format(
                     path=output_path,
@@ -90,10 +91,11 @@ class Pipeline:
                 ))
                 return
 
-            # The clock stops here. What follows is the PDF already made
-            # and the printing about to be offered, and neither is time
-            # spent producing the certificates.
-            elapsed = time.time() - started - self.pdf_seconds()
+            # Added up from the parts rather than read off a clock. A wall
+            # clock counts the PDF, the printing, and the seconds somebody
+            # spends reading a question before answering it - none of which
+            # is work DocuMate did.
+            elapsed = self.generate_seconds() + write_seconds
 
             self.offer_printing(printed_data, printed_count, output_path)
 
@@ -294,20 +296,14 @@ class Pipeline:
 
         successful = self.engine.generate(records, output_path)
 
-        # The PDF export is left out. It launches Word and has nothing to
-        # do with rendering the certificates, so counting it would make the
-        # engine look slower than it is and make two engines that render at
-        # the same speed look different.
-        print(messages.MERGE_DONE.format(count=len(successful)))
-        print(messages.MERGE_TIME.format(
-            engine=self.engine.label,
-            seconds=time.time() - started - self.pdf_seconds(),
-        ))
+        # The engine prints what it made, how long it took and where it
+        # went, in one line. Saying it again here only made the same
+        # sentence appear twice.
         return successful, output_path
 
-    def pdf_seconds(self):
-        """How long the engine spent exporting a PDF, or zero if it didn't."""
-        return getattr(self.engine, "pdf_seconds", 0.0)
+    def generate_seconds(self):
+        """How long the engine spent making the documents."""
+        return getattr(self.engine, "generate_seconds", 0.0)
 
     # -- running more than once ---------------------------------------------
 

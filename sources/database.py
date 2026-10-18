@@ -3,7 +3,7 @@ Database source, shared by both backends. Used by Z and O.
 
 This file holds everything that is the same for PostgreSQL and Azure SQL:
 reading the pending applicants, turning each row into a record for the
-template, and marking records as PRINTED afterwards.
+template, and writing their status back afterwards.
 
 A backend only supplies the parts that differ between the two databases:
 

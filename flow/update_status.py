@@ -1,8 +1,8 @@
 """
-Asking the user, and marking the records as printed.
+Asking the user, and marking the records as completed.
 
 Both halves of that live here together, because they are one decision:
-nothing ever gets marked printed unless the user says yes, so the question
+nothing is ever marked completed unless the user says yes, so the question
 and the update belong in the same place.
 
 Where the update actually goes depends on the version - the Excel versions
@@ -27,8 +27,10 @@ def update_status(sink, data, count, failed=0):
     count  - how many succeeded, for the question
     failed - how many failed to render
 
-    Returns a bit of text for the summary popup, or an empty string if the
-    user said no.
+    Returns (text, seconds): a bit of text for the summary popup and how
+    long the write itself took. The seconds are the write only, not the
+    wait for an answer - a run should not look slower because somebody
+    took a moment to read the question.
 
     The question is always asked, and the answer always wins over whatever
     the version was set up with. That was true in the original scripts and
@@ -38,7 +40,7 @@ def update_status(sink, data, count, failed=0):
         count=count,
         failed=" ({} failed)".format(failed) if failed else "",
     )):
-        return ""
+        return "", 0.0
 
     print(messages.UPDATING.format(target=sink.label))
     started = time.time()
@@ -48,7 +50,9 @@ def update_status(sink, data, count, failed=0):
     # PRINTED if it happens.
     sink.mark_status(data, config.COMPLETED_STATUS)
 
+    seconds = time.time() - started
+
     return messages.UPDATE_SUFFIX.format(
         target=sink.label,
-        seconds=time.time() - started,
-    )
+        seconds=seconds,
+    ), seconds
