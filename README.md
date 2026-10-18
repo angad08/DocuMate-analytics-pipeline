@@ -16,7 +16,7 @@ DocuMate brings document generation and status tracking into one workflow, with 
 
 - **Operational use:** helped the Dispatch team clear approximately 88% of a pending backlog in one week.
 - **Benchmark:** DocuMate O processed 1,440 records in about 100 seconds. At the measured manual rate of 315 seconds per record, the equivalent manual workload is an estimated 126 hours.
-- **Processing control:** successfully generated records are marked as `PRINTED`, so subsequent runs can select pending work.
+- **Processing control:** generated records are marked `COMPLETED`, and `PRINTED` once sent to a printer, so subsequent runs select only work that is still outstanding.
 - **Reporting:** Power BI can read the same PostgreSQL data used by DocuMate to report on processing volume and backlog.
 
 The benchmark measures automated processing, not the full time needed for review, signing and dispatch.
@@ -26,8 +26,9 @@ The benchmark measures automated processing, not the full time needed for review
 1. **Read pending records** from Excel, PostgreSQL or Azure SQL, depending on the selected version. The Excel versions read the sheet people type into and work the certificate fields out from it; the database versions read columns the database already holds separately.
 2. **Apply the version's checks.** Excel versions run the five-stage validation routine, which also checks the columns the certificate fields are built from, so a blank address line or an unreadable date is caught before it prints as a stray comma. Database versions use SQL filtering and database constraints; they do not run that same routine.
 3. **Generate certificates** in a combined Word document using Python template rendering or Word Mail Merge. A PDF copy is saved alongside it, converted from the finished Word file so the two always match. PDF export uses Word, so it needs Microsoft Word on Windows; where that is unavailable the Word document is still produced and only the PDF step is skipped.
-4. **Update processing status** for successfully generated records in the source.
-5. **Use the database for reporting**, without copying the records into a separate reporting spreadsheet.
+4. **Update processing status** for successfully generated records, from `IN PROCESS` to `COMPLETED`.
+5. **Offer to print** the merged document, and mark what was printed as `PRINTED`. Optional: the files are saved first, so declining loses nothing.
+6. **Use the database for reporting**, without copying the records into a separate reporting spreadsheet.
 
 The optional ADF route adds an ingestion step before the database workflow:
 
@@ -101,6 +102,28 @@ The Excel versions (`v3`, `x`, `y`) run from the synthetic workbook in `files/da
 
 Your own workbook needs a `Signing_Authority` column before a run will start; see [The Excel sheet](#the-excel-sheet).
 
+### Running without Python
+
+Each version can be built as a single `.exe` that carries its own Python and
+every library it needs, so the PC it runs on needs neither installed:
+
+```bash
+pip install pyinstaller
+python packaging\build_exe.py          # all five
+python packaging\build_exe.py v3 x     # or just some
+```
+
+The exes are written to `dist\`. Keep them there: an exe looks one folder up
+for `files\` and the `.env` file, so one moved elsewhere will not find the
+templates or the workbook.
+
+Microsoft Word is still required for the Mail Merge versions, for PDF export
+and for printing - those drive Word itself rather than reimplementing it.
+
+The window icon comes from `logo\documate.ico`. Windows will not accept a PNG
+however it is named, so `packaging\make_icon.py` builds the `.ico` from
+`logo\documate.ico.png` whenever the logo changes.
+
 ## The Excel sheet
 
 The Excel versions read the sheet people type into. DocuMate works the
@@ -133,6 +156,58 @@ the run:
 ```
 DOCUMATE_FILE_PREFIX=IND/MEL/
 DOCUMATE_MHA_PREFIX=
+```
+
+## Printing
+
+After the documents are generated, DocuMate offers to send the merged file to
+a printer. It is optional: the Word file and its PDF are saved first, so
+declining costs nothing and the file can be printed by hand later.
+
+The printer is chosen rather than assumed. Pressing Enter takes the one the
+machine already prints to, so the usual answer is a single keypress, but the
+list is shown because a Windows default is often not a printer at all.
+Printers that write a file rather than paper - Print to PDF, XPS, OneNote,
+Fax - are marked as such, since sending a hundred certificates to one of
+those produces nothing and looks like it worked.
+
+The printer is checked before the job is sent. An offline, jammed or
+unreachable printer stops the run with a message naming the problem, rather
+than a job disappearing into a queue nobody is watching.
+
+The `.docx` is printed, not the PDF. Word opens a PDF by converting it back
+into an editable document, which reflows the layout; and handing the file to
+whatever program owns `.pdf` prints to the default printer with no way to
+choose another. The PDF is made by Word's own export, so printing the Word
+file puts the same pages on paper with the printer still under control.
+
+Set `DOCUMATE_PRINTING=0` to turn the offer off, for an office that prints
+by hand or for an unattended run with nobody to answer the question.
+
+### What the statuses mean
+
+| Status | Meaning |
+| --- | --- |
+| `IN PROCESS` | Not yet done. Blank or an unrecognised value counts as this |
+| `COMPLETED` | The document has been generated |
+| `PRINTED` | The job was accepted by a printer |
+
+A run that generates and is not printed stops at `COMPLETED`, which is what
+happened. Both `COMPLETED` and `PRINTED` count as finished, so neither is
+picked up again on the next run.
+
+`PRINTED` means the job was accepted and spooled without error. That is not
+proof that paper exists - a job can still be cancelled at the device - but it
+is the strongest thing that can be known without asking somebody to go and
+count the stack.
+
+A database needs its `status` constraint to allow the middle value before the
+database versions will write it:
+
+```sql
+ALTER TABLE applicant DROP CONSTRAINT chk_applicant_status;
+ALTER TABLE applicant ADD CONSTRAINT chk_applicant_status
+  CHECK (UPPER(status) IN ('IN PROCESS', 'COMPLETED', 'PRINTED'));
 ```
 
 ## Modular structure
