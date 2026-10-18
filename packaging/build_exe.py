@@ -63,6 +63,10 @@ def build(key):
         "--collect-data", "docxcompose",
         "--hidden-import", "openpyxl",
         "--hidden-import", "win32timezone",
+        # Printing enumerates printers through win32print. PyInstaller does
+        # not see it, because it is imported inside a function so the Excel
+        # versions can run without it.
+        "--hidden-import", "win32print",
         # Left out to keep the exe smaller. v3 and X read Excel, so they do
         # not need the database drivers (used only by Z and O).
         "--exclude-module", "pytest",

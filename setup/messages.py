@@ -180,3 +180,65 @@ NO_SIGNING_AUTHORITY = (
     "records being printed. It is the one field that has to be chosen\n"
     "rather than worked out, which is why it is the only one left manual."
 )
+
+# ---------------------------------------------------------------------------
+# Printing
+# ---------------------------------------------------------------------------
+
+ASK_PRINT = "DocuMate : Print the {count} merged certificate(s)? (yes/no): "
+
+CHOOSE_PRINTER = "Printer"
+
+CHOOSE_AGAIN = "   Type a number from 1 to {count}, or n to skip."
+
+PRINTERS_HEADING = "\nPrinters:"
+
+# Marked so a virtual printer is obvious before it is chosen rather than
+# after a hundred certificates have gone into a file nobody asked for.
+PRINTER_DEFAULT_TAG = "   [default]"
+PRINTER_VIRTUAL_TAG = "  (writes a file, not paper)"
+
+NO_PRINTERS = (
+    "DocuMate : No printers are set up on this PC, so there is nothing to\n"
+    "           print to. The documents are saved and can be printed later."
+)
+
+PRINTING_UNAVAILABLE = (
+    "Printing needs pywin32, which could not be loaded: {error}"
+)
+
+PRINTER_UNREACHABLE = (
+    "The printer \"{printer}\" could not be reached: {error}"
+)
+
+PRINTER_NOT_READY = (
+    "The printer \"{printer}\" is {problem}."
+)
+
+PRINT_FILE_MISSING = (
+    "The merged document is no longer at:\n\n    {path}"
+)
+
+PRINT_FAILED = (
+    "The job was not accepted by \"{printer}\":\n\n    {error}"
+)
+
+PRINT_SENDING = "DocuMate : Sending {count} certificate(s) to {printer}..."
+
+PRINT_SENT = "DocuMate : Print job accepted."
+
+# Said plainly, because the status it writes claims more than it can prove.
+PRINT_NOT_CONFIRMED = (
+    "DocuMate : The job was accepted by the printer. Check the stack before\n"
+    "           treating these as issued."
+)
+
+PRINT_SKIPPED = (
+    "DocuMate : Nothing was printed. The documents are saved in:\n\n    {path}"
+)
+
+PRINT_PROBLEM = (
+    "{problem}\n\n"
+    "Nothing has been printed and no statuses were changed. The documents\n"
+    "are saved and can be printed again once the printer is ready."
+)

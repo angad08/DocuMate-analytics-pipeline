@@ -13,6 +13,7 @@ instead and the program carries on exactly the same.
 import sys
 
 from setup import config
+from setup import messages
 
 TITLE = "DocuMate"
 
@@ -123,3 +124,47 @@ def progress_bar(done, total, template):
     if done == total:
         print()                 # leave the finished bar on its own line
         _printed_width = 0
+
+
+# ---------------------------------------------------------------------------
+# Choosing from a list
+# ---------------------------------------------------------------------------
+
+def choose(prompt, options, default_index=None, cancel_words=("n", "no", "cancel")):
+    """
+    Show a numbered list and return the index chosen, or None to cancel.
+
+    `options` is a list of lines already formatted for display. Pressing
+    Enter takes `default_index` when there is one, so the common case - the
+    printer the machine already prints to - costs a single keypress and the
+    list is there for the times it is wrong.
+
+    Anything unrecognised asks again rather than guessing, because the
+    alternative is sending a hundred certificates somewhere nobody meant.
+    """
+    if not options:
+        return None
+
+    for number, line in enumerate(options, start=1):
+        print("  %d. %s" % (number, line))
+    print("")
+
+    while True:
+        if default_index is not None:
+            answer = input("%s [%d]: " % (prompt, default_index + 1))
+        else:
+            answer = input("%s: " % prompt)
+
+        answer = answer.strip().lower()
+
+        if answer == "" and default_index is not None:
+            return default_index
+        if answer in cancel_words:
+            return None
+
+        if answer.isdigit():
+            chosen = int(answer) - 1
+            if 0 <= chosen < len(options):
+                return chosen
+
+        print(messages.CHOOSE_AGAIN.format(count=len(options)))

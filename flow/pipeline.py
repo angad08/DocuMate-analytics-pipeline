@@ -24,6 +24,7 @@ from flow import checks
 from engines.output_paths import build_output_name
 from flow.update_status import update_status
 from flow.checks import CheckFailed
+from setup import config
 
 
 class Pipeline:
@@ -89,12 +90,19 @@ class Pipeline:
                 ))
                 return
 
+            # The clock stops here. What follows is the PDF already made
+            # and the printing about to be offered, and neither is time
+            # spent producing the certificates.
+            elapsed = time.time() - started - self.pdf_seconds()
+
+            self.offer_printing(printed_data, printed_count, output_path)
+
             ui.notify(messages.SUCCESS.format(
                 count=printed_count,
                 failed_text=messages.RENDER_FAILURES.format(failed=failed_count)
                             if failed_count else "",
                 update_text=update_text,
-                seconds=time.time() - started,
+                seconds=elapsed,
                 engine=self.engine.label,
                 source=self.source.label,
             ))
@@ -177,6 +185,100 @@ class Pipeline:
 
         return checks.sort_by_serial(data)
 
+    def offer_printing(self, data, count, output_path):
+        """
+        Offer to print the merged document, and mark what was printed.
+
+        Everything here is optional and everything fails softly. The
+        documents are already saved by the time this runs, so no answer and
+        no failure can lose work - the worst case is that the records stay
+        as they are and the file is printed by hand later.
+        """
+        if not config.OFFER_PRINTING:
+            return
+
+        from engines import printing
+
+        try:
+            printers, default = printing.available_printers()
+        except RuntimeError as error:
+            print(messages.PRINTING_UNAVAILABLE.format(error=error))
+            return
+
+        if not printers:
+            print(messages.NO_PRINTERS)
+            return
+
+        if not ui.confirm(messages.ASK_PRINT.format(count=count)):
+            print(messages.PRINT_SKIPPED.format(path=output_path))
+            return
+
+        chosen = self.choose_printer(printers, default)
+        if chosen is None:
+            print(messages.PRINT_SKIPPED.format(path=output_path))
+            return
+
+        # Asked before the job is sent, while there is still something
+        # useful to say about it.
+        problem = printing.printer_problem(chosen["name"])
+        if problem:
+            ui.notify(messages.PRINT_PROBLEM.format(problem=problem))
+            return
+
+        print(messages.PRINT_SENDING.format(count=count, printer=chosen["name"]))
+
+        try:
+            printing.print_document(output_path, chosen["name"])
+        except RuntimeError as error:
+            ui.notify(messages.PRINT_PROBLEM.format(problem=error))
+            return
+
+        print(messages.PRINT_SENT)
+
+        # Only now do the records become PRINTED. A record that was never
+        # marked COMPLETED moves straight here from IN PROCESS, which is
+        # what happens when the status question was answered no and the
+        # print question yes.
+        try:
+            self.sink.mark_status(data, config.DONE_STATUS)
+        except Exception as error:
+            ui.notify(messages.STATUS_UPDATE_FAILED.format(
+                path=output_path,
+                source=self.sink.label,
+                reason=error,
+            ))
+            return
+
+        print(messages.PRINT_NOT_CONFIRMED)
+
+    def choose_printer(self, printers, default):
+        """
+        Show the printers and return the one chosen, or None to skip.
+
+        The default is offered first so the usual answer is Enter. Printers
+        that write a file rather than paper are marked, because on a lot of
+        machines the default is Microsoft Print to PDF and sending a
+        hundred certificates there looks like it worked.
+        """
+        lines = []
+        default_index = None
+
+        for number, printer in enumerate(printers):
+            line = printer["name"]
+            if printer["name"] == default:
+                line = line + messages.PRINTER_DEFAULT_TAG
+                default_index = number
+            if printer["virtual"]:
+                line = line + messages.PRINTER_VIRTUAL_TAG
+            lines.append(line)
+
+        print(messages.PRINTERS_HEADING)
+        chosen = ui.choose(messages.CHOOSE_PRINTER, lines, default_index)
+
+        if chosen is None:
+            return None
+        return printers[chosen]
+
     def make_documents(self, data):
         """Hand the records to the engine and report how long it took."""
         print(messages.ENGINE_START.format(engine=self.engine.label))
@@ -192,12 +294,20 @@ class Pipeline:
 
         successful = self.engine.generate(records, output_path)
 
+        # The PDF export is left out. It launches Word and has nothing to
+        # do with rendering the certificates, so counting it would make the
+        # engine look slower than it is and make two engines that render at
+        # the same speed look different.
         print(messages.MERGE_DONE.format(count=len(successful)))
         print(messages.MERGE_TIME.format(
             engine=self.engine.label,
-            seconds=time.time() - started,
+            seconds=time.time() - started - self.pdf_seconds(),
         ))
         return successful, output_path
+
+    def pdf_seconds(self):
+        """How long the engine spent exporting a PDF, or zero if it didn't."""
+        return getattr(self.engine, "pdf_seconds", 0.0)
 
     # -- running more than once ---------------------------------------------
 
