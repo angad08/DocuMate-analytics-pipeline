@@ -20,6 +20,7 @@ into the file.
 """
 
 import os
+import time
 from io import BytesIO
 
 from setup import messages
@@ -45,6 +46,10 @@ class DocxtplEngine:
         self.template_path = template_path
         self.max_workers = max_workers
         self.to_pdf = to_pdf
+
+        # How long the PDF export took, so the caller can leave it out
+        # of the time it reports for generating.
+        self.pdf_seconds = 0.0
 
     def add_page_break(self, document):
         """Add a page break at the end of the document."""
@@ -134,7 +139,14 @@ class DocxtplEngine:
         print(messages.SAVED.format(count=total - failed, path=output_path))
 
         # Step 5: PDF copy, made from the saved .docx.
+        #
+        # Timed separately so the engine's own figure stays what it says it
+        # is: how long the documents took. Exporting a PDF launches Word,
+        # which has nothing to do with rendering and would otherwise be
+        # counted as part of it.
         if self.to_pdf:
+            pdf_started = time.time()
             convert_to_pdf(output_path)
+            self.pdf_seconds = time.time() - pdf_started
 
         return successful

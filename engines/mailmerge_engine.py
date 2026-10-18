@@ -128,6 +128,10 @@ class MailMergeEngine:
         self.visible = visible
         self.to_pdf = to_pdf
 
+        # How long the PDF export took, so the caller can leave it out
+        # of the time it reports for generating.
+        self.pdf_seconds = 0.0
+
     def generate(self, records, output_path):
         """
         Merge every record and save one document. The steps are listed at
@@ -245,6 +249,7 @@ class MailMergeEngine:
             # combined is None when there was only one batch, because that
             # file was moved into place rather than opened, so open it here.
             if self.to_pdf:
+                pdf_started = time.time()
                 try:
                     if combined is None:
                         combined = word.Documents.Open(
@@ -255,6 +260,9 @@ class MailMergeEngine:
                     export_document(combined, output_path)
                 except Exception as error:
                     print(messages.PDF_FAILED.format(error=error))
+                # Counted whether it worked or not: the time was spent
+                # either way, and it is not time spent generating.
+                self.pdf_seconds = time.time() - pdf_started
 
             return list(range(1, total + 1))
 
