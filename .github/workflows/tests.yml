@@ -1,0 +1,43 @@
+# Run the test suite on every push and pull request.
+#
+# The tests deliberately do not need Word, a printer or a database - they
+# cover the code that decides what those are asked to do, not the things
+# themselves - so they run on a plain Linux runner. requirements.txt guards
+# pywin32 with sys_platform == "win32", so installing it here is fine too.
+#
+# What this does not cover: anything that drives Word. Mail Merge, the PDF
+# export, printing and the built exes are all Windows-and-Word work, and
+# none of it is exercised here. A green tick means the logic holds, not that
+# a certificate came out of a printer.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # So the suite can be run by hand from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # The version DocuMate is developed against.
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests -q
