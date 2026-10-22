@@ -85,6 +85,10 @@ def bar_characters():
 # the tail of the longer line on screen.
 _printed_width = 0
 
+# The bar as last drawn, while it is still on screen and unfinished. None
+# when there is no bar to redraw.
+_open_bar = None
+
 
 def progress_bar(done, total, template):
     """
@@ -97,7 +101,7 @@ def progress_bar(done, total, template):
     captured, carriage returns pile thousands of half-lines into the log, so
     there it prints one ordinary line at each 10% instead, and always the last.
     """
-    global _printed_width
+    global _printed_width, _open_bar
 
     if total <= 0:
         return
@@ -120,10 +124,30 @@ def progress_bar(done, total, template):
 
     print(line.ljust(_printed_width), end="\r", flush=True)
     _printed_width = max(_printed_width, len(line))
+    _open_bar = line
 
     if done == total:
         print()                 # leave the finished bar on its own line
         _printed_width = 0
+        _open_bar = None
+
+
+def say(message):
+    """
+    Print a line while a progress bar may be on screen.
+
+    A plain print would start over the bar's line, which the cursor is still
+    on, and leave the end of the bar showing after a shorter message:
+    "Batch 3 of 7 - records 501 to 750500/1556 records". This wipes the bar,
+    prints the message on its own line, and draws the bar again below it.
+    """
+    if _open_bar is None or not sys.stdout.isatty():
+        print(message)
+        return
+
+    print(" " * _printed_width, end="\r")
+    print(message)
+    print(_open_bar.ljust(_printed_width), end="\r", flush=True)
 
 
 # ---------------------------------------------------------------------------

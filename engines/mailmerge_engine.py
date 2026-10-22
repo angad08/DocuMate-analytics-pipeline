@@ -221,7 +221,7 @@ class MailMergeEngine:
             for number, (first, last) in enumerate(batches, start=1):
 
                 if len(batches) > 1:
-                    print(messages.MM_BATCH.format(
+                    ui.say(messages.MM_BATCH.format(
                         number=number,
                         total=len(batches),
                         first=first,
