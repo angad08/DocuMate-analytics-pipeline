@@ -153,8 +153,8 @@ at the method.
 python -m pytest tests -q     # 39 passed
 ```
 
-Beyond that, checked against the real `files/data/DocuMate_DataFrame.xlsx`
-(1,440 rows, 121 pending):
+Beyond that, checked against the workbook then at `files/data/DocuMate_DataFrame.xlsx`
+(1,440 rows, 121 pending; since removed from the repository):
 
 - **Same records.** The original v3 filtering, date formatting and sorting was
   run verbatim next to the new code. Same 121 records, same order, **zero

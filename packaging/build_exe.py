@@ -13,7 +13,7 @@ Output
 ------
 The exes are written to dist\\ in the project folder. Keep them there.
 When an exe runs, config.project_root() goes one folder up from the exe to
-find files\\ (data, templates, output) and the .env file. An exe moved
+find files\\ (data, templates, output) and the config.env file. An exe moved
 somewhere else will not find them.
 
 Each exe carries its own Python and every library it needs, so the PC it

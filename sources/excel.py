@@ -18,15 +18,36 @@ from setup import messages
 from sources import excel_format
 
 
+def id_key(value):
+    """
+    An ID as text, so the cell and the value read from it compare equal.
+
+    The read side has been tidied (stripped, 12.0 made 12) and the sheet
+    has not, so comparing them as they are would miss a row over a
+    trailing space or a decimal point.
+    """
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return excel_format.as_text(value)
+
+
 class ExcelSource:
     """Reads records from a worksheet, and writes statuses back to it."""
 
     # Shown in messages, e.g. "Reading Excel..."
     label = "Excel"
 
-    def __init__(self, path, sheet):
+    def __init__(self, path, sheet=None):
+        # None reads the first sheet in the workbook, so a case whose
+        # workbook has one sheet does not need to name it.
         self.path = path
         self.sheet = sheet
+
+    def worksheet(self, workbook):
+        """This source's sheet in an openpyxl workbook: the named one, or the first."""
+        if self.sheet:
+            return workbook[self.sheet]
+        return workbook.worksheets[0]
 
     # -- reading ------------------------------------------------------------
 
@@ -54,7 +75,7 @@ class ExcelSource:
         to hold.
         """
         try:
-            frame = pd.read_excel(self.path, sheet_name=self.sheet)
+            frame = pd.read_excel(self.path, sheet_name=self.sheet or 0)
         except ValueError as error:
             if "not found" not in str(error).lower():
                 raise
@@ -80,19 +101,30 @@ class ExcelSource:
         """
         try:
             workbook = load_workbook(self.path)
-            sheet = workbook[self.sheet]
+            sheet = self.worksheet(workbook)
 
             # The same sheet again, showing what each formula displays instead
             # of the formula. Serial is often a formula (="...A2 & "/" & ..."),
             # and pandas read the displayed value, so that is what has to be
             # matched. Only ever read from this copy - saving it would replace
             # every formula with its last value.
-            shown = load_workbook(self.path, data_only=True)[self.sheet]
+            shown = self.worksheet(load_workbook(self.path, data_only=True))
 
             # Map column name -> column number, from the header row.
             columns = {}
             for number, cell in enumerate(sheet[1], start=1):
                 columns[cell.value] = number
+
+            register = config.is_register()
+
+            # Another case study's sheet may not have had a STATUS column:
+            # one was supplied on read, so add it to the sheet now. The
+            # register keeps refusing, because its sheet always has one and
+            # a missing one there means the wrong sheet.
+            if "STATUS" not in columns and not register:
+                new_column = sheet.max_column + 1
+                sheet.cell(row=1, column=new_column, value="STATUS")
+                columns["STATUS"] = new_column
 
             if "STATUS" not in columns:
                 raise ValueError(messages.EXCEL_NO_STATUS_COLUMN)
@@ -100,15 +132,25 @@ class ExcelSource:
             # A raw entry sheet may call the column "S No.", and holds the
             # bare number: the "/year" was added on read, from the
             # registration date. It is rebuilt the same way here so the two
-            # can be matched.
+            # can be matched. Any other sheet is matched on its ID column,
+            # exactly as it reads.
+            id_name = config.id_column()
+            if register:
+                names = excel_format.RAW_ALIASES["S No."]
+                registration_column = columns.get(
+                    excel_format.RAW_COLUMNS["registration_date"])
+            else:
+                names = [id_name]
+                registration_column = None
+
             serial_name = None
-            for name in excel_format.RAW_ALIASES["S No."]:
+            for name in names:
                 if name in columns:
                     serial_name = name
             if serial_name is None:
-                raise ValueError(messages.EXCEL_NO_SERIAL_COLUMN)
-            registration_column = columns.get(
-                excel_format.RAW_COLUMNS["registration_date"])
+                if register:
+                    raise ValueError(messages.EXCEL_NO_SERIAL_COLUMN)
+                raise ValueError(messages.EXCEL_NO_ID_COLUMN.format(column=id_name))
 
             # Older sheets don't have Date_Printed, so add it.
             if "Date_Printed" not in columns:
@@ -119,12 +161,17 @@ class ExcelSource:
             status_column = columns["STATUS"]
             date_column = columns["Date_Printed"]
             serial_column = columns[serial_name]
-            serials = set(data["Serial"])
+            if register:
+                serials = set(data[id_name])
+            else:
+                serials = {id_key(value) for value in data[id_name]}
             today = datetime.now().strftime("%d/%m/%Y")
             marked = 0
 
             for row in range(2, sheet.max_row + 1):
                 serial = shown.cell(row=row, column=serial_column).value
+                if not register:
+                    serial = id_key(serial)
                 if serial not in serials and registration_column:
                     serial = excel_format.serial_for(
                         serial,
@@ -153,7 +200,7 @@ class ExcelSource:
                 print(messages.EXCEL_COUNT_WARNING.format(expected=len(data), marked=marked))
 
             print(messages.EXCEL_UPDATED.format(
-                sheet=self.sheet,
+                sheet=sheet.title,
                 date=today,
                 clock=time.strftime("%H:%M:%S"),
             ))

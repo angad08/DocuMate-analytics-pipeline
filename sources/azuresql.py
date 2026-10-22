@@ -81,7 +81,7 @@ def odbc_value(value):
 
 def connection_string(settings, driver):
     """
-    Build the ODBC connection string from the .env settings.
+    Build the ODBC connection string from the config.env settings.
 
     settings   dict from config.database_settings(): host, port, database,
                user, password

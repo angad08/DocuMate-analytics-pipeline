@@ -7,8 +7,9 @@ launch() with its version key, which runs main.main() exactly as
 
     python main.py v3
 
-would. All other settings (PDF on or off, polling, batch size) still come
-from versions/registry.py.
+would - including asking for the Excel file and Word template. All other
+settings (PDF on or off, polling, batch size) still come from
+versions/registry.py.
 """
 
 import multiprocessing
@@ -30,8 +31,10 @@ def launch(version):
     # records in parallel). Does nothing when run as a normal script.
     multiprocessing.freeze_support()
 
+    # Anything after the exe's name is passed on, so a shortcut can add
+    # options:  DocuMate_v3.exe --once
     try:
-        main.main([version])
+        main.main([version] + sys.argv[1:])
     finally:
         # A double-clicked exe closes its window as soon as it finishes.
         # Waiting for Enter keeps the messages on screen to read.

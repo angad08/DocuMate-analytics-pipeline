@@ -193,9 +193,15 @@ def problem_table(problems):
     return lines
 
 
-def check_records(data, serial_fixer=None, date_columns=()):
+def check_records(data, serial_fixer=None, date_columns=(), required=None,
+                  blanks_ok=None):
     """
     Run the five checks and hand back the rows worth processing.
+
+    required    the columns the template prints, for any sheet but the
+                birth register; None checks every column (the register)
+    blanks_ok   asked, with the number of rows, whether blank cells in
+                `required` columns may print as blanks; None refuses them
 
         1. Is there any data at all?
         2. Is there a STATUS column?
@@ -226,7 +232,9 @@ def check_records(data, serial_fixer=None, date_columns=()):
     # after the pending filter, so a finished row with a gap in it cannot
     # block a run. What to do about the gaps is the caller's decision: the
     # pipeline asks when someone is watching and refuses when it is not.
-    missing_serials = serial_numbers_missing(data)
+    # Another case study's ID column is checked like any other field in 4:
+    # numbering it 1/year would invent IDs that mean nothing in that sheet.
+    missing_serials = serial_numbers_missing(data) if config.is_register() else []
     if missing_serials:
         if serial_fixer is None:
             raise CheckFailed(
@@ -237,23 +245,47 @@ def check_records(data, serial_fixer=None, date_columns=()):
     # Checked on its own because the fix is a setting rather than a row
     # edit, and because an officer's name on an official document is not
     # something to supply from a default.
-    if "Signing_Authority_Name" in data.columns:
+    if config.is_register() and "Signing_Authority_Name" in data.columns:
         filled = data["Signing_Authority_Name"].apply(
             lambda v: not (pd.isna(v) or str(v).strip() == ""))
         if not filled.any():
             raise CheckFailed(messages.NO_SIGNING_AUTHORITY)
 
     # --- 4. Are any must-have fields empty? ---
-    # STATUS, Date_Printed and Date_Issued are allowed to be empty. Every
-    # other column ends up in the certificate, so an empty one there means
-    # a broken document.
-    must_have = []
-    for column in data.columns:
-        if column not in config.OPTIONAL_COLUMNS:
-            must_have.append(column)
+    # The birth register: every column except the optional ones, because
+    # its columns are joined into certificate fields and a gap inside a join
+    # would hide. Any other sheet: only the columns its template prints
+    # (`required`), and the ID column, which every row is marked done by.
+    if required is None:
+        optional = config.optional_columns()
+        must_have = [column for column in data.columns if column not in optional]
+    else:
+        must_have = list(required)
+        id_name = config.id_column()
+        if id_name in data.columns and id_name not in must_have:
+            must_have.append(id_name)
 
     if must_have:
         problems = field_problems(data, must_have, date_columns)
+
+        # A blank cell in a printed field is sometimes right - a Remarks
+        # column - so with someone watching, `blanks_ok` may let it through.
+        # Never for the ID, and never for a date that could not be read:
+        # those are mistakes, not choices.
+        if problems and required is not None and blanks_ok is not None:
+            id_name = config.id_column()
+            only_blanks = all(issue == "Missing" and column != id_name
+                              for _r, column, issue, _v in problems)
+            if only_blanks:
+                rows_affected = len({row for row, _c, _i, _v in problems})
+                for line in problem_table(problems):
+                    print(line)
+                if blanks_ok(rows_affected):
+                    problems = []
+                else:
+                    # The rows are already on screen; listing them twice
+                    # only pushes the question that was answered out of view.
+                    raise CheckFailed(messages.MISSING_FIELDS.format(count=rows_affected))
 
         if problems:
             rows_affected = len({row for row, _c, _i, _v in problems})
@@ -267,8 +299,8 @@ def check_records(data, serial_fixer=None, date_columns=()):
     # a file number issued elsewhere is either a typo or a record that does
     # not belong in this register. An empty prefix in config turns it off.
     for column, prefix, label in [
-        ("File_Number", config.FILE_NUMBER_PREFIX, "File No"),
-        ("MHA_File_No", config.MHA_FILE_PREFIX, "MHA_File_No"),
+        ("File_Number", config.file_number_prefix(), "File No"),
+        ("MHA_File_No", config.mha_file_prefix(), "MHA_File_No"),
     ]:
         failures = prefix_failures(data, column, prefix)
         if failures:
@@ -281,14 +313,14 @@ def check_records(data, serial_fixer=None, date_columns=()):
             )
 
     # --- 5. Same applicant entered twice? ---
-    key = config.DUPLICATE_KEY
-    if key in data.columns:
+    key = config.duplicate_column()
+    if key and key in data.columns:
         duplicates = data[data.duplicated(subset=[key], keep=False)]
 
         if not duplicates.empty:
             show_columns = []
-            for column in [key, "Serial", "Name", "Date_Issued"]:
-                if column in data.columns:
+            for column in [key, config.id_column(), "Name", "Date_Issued"]:
+                if column in data.columns and column not in show_columns:
                     show_columns.append(column)
 
             raise CheckFailed(
@@ -345,7 +377,7 @@ def sort_by_serial(data):
     the whole column can't be read as numbers we skip the sort rather than
     fail the run, same as before.
     """
-    column = config.SORT_COLUMN
+    column = config.sort_column()
     if column not in data.columns:
         return data
 
@@ -377,6 +409,14 @@ def to_records(data, add_year=None):
         add_year = config.INJECT_YEAR
 
     records = data.to_dict("records")
+
+    # An empty optional cell reaches here as NaN, NA or None, and docxtpl
+    # prints each of those as the word itself - "nan" on the document. A
+    # blank cell should print as nothing.
+    for record in records:
+        for name, value in record.items():
+            if value is None or (not isinstance(value, (list, dict)) and pd.isna(value)):
+                record[name] = ""
 
     if add_year:
         year = datetime.now().year

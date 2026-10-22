@@ -9,11 +9,11 @@ are changing the certificate layout or pointing DocuMate at a different form.
 
 ## Template Setup
 
-DocuMate uses two types of Word templates depending on the rendering engine. Both live in the `files/templates/` folder.
+DocuMate uses two types of Word templates depending on the rendering engine. Each run asks for the template with a file picker, unless `DOCUMATE_TEMPLATE` (docxtpl) or `DOCUMATE_TEMPLATE_MM` (Mail Merge) is set in `config.env`; `files/templates/` is where the picker opens first. A worked docxtpl sample is `files/templates/SAMPLE_CASE_STUDY.docx`.
 
 ### docxtpl template (v1, v2, v3, Z)
 
-`DOCUMENT_TEMPLATE_FILE.docx` is a standard Word document with Jinja-style placeholders. These are double-curly-brace tags that `docxtpl` replaces with data at render time.
+A docxtpl template is a standard Word document with Jinja-style placeholders. These are double-curly-brace tags that `docxtpl` replaces with data at render time.
 
 To create or edit the template, open a `.docx` file in Microsoft Word and type the placeholders directly where each value should appear. For example:
 
@@ -27,7 +27,7 @@ No special Word configuration is needed. The file is a normal `.docx` document -
 
 ### Word Mail Merge template (Y, X, O)
 
-`DOCUMENT_TEMPLATE_FILE_MM.docx` is a Word Mail Merge template. Unlike the docxtpl template, this one requires a one-time configuration inside Microsoft Word to link it to a data source and insert merge fields.
+A Mail Merge template is a Word document linked to a data source. Unlike the docxtpl template, this one requires a one-time configuration inside Microsoft Word to link it to a data source and insert merge fields.
 
 #### Steps to create the template
 
@@ -35,8 +35,8 @@ No special Word configuration is needed. The file is a normal `.docx` document -
 2. Go to the **Mailings** tab in the ribbon.
 3. Click **Start Mail Merge** and select **Letters** (or **Normal Word Document**).
 4. Click **Select Recipients** and choose **Use an Existing List**.
-5. Browse to `files/data/DocuMate_DataFrame.xlsx` and select it.
-6. If prompted, select the **DocuMateSRC** sheet.
+5. Browse to the Excel workbook the template will be used with and select it.
+6. If prompted, select the sheet that holds the records.
 7. Word now knows which data source the template is linked to.
 8. Place your cursor where each field should appear in the document and click **Insert Merge Field** to add the placeholders.
 
@@ -59,7 +59,7 @@ Both templates use the same field names, which correspond to the column names pr
 
 In the docxtpl template, these appear as `{{Name}}`, `{{Serial}}`, etc. In the Mail Merge template, these are inserted via Word's **Insert Merge Field** button.
 
-9. Once all merge fields are placed, save the Mail Merge template as `DOCUMENT_TEMPLATE_FILE_MM.docx` in the `files/templates/` folder.
+9. Once all merge fields are placed, save the Mail Merge template, for example in the `files/templates/` folder.
 
 #### Note for DocuMateO
 

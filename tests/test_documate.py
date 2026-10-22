@@ -35,6 +35,11 @@ from flow.checks import CheckFailed
 from versions import registry
 
 
+@pytest.fixture(autouse=True)
+def birth_register_case(birth_register):
+    """Everything in this file describes the birth register case."""
+
+
 def sheet(**changes):
     """A small valid sheet. Override one column to break one check."""
     rows = {
@@ -317,7 +322,7 @@ def test_a_database_row_produces_the_template_field_names():
 # The version list
 # ---------------------------------------------------------------------------
 
-def test_all_five_versions_are_there():
+def test_all_versions_are_there():
     assert set(registry.VERSIONS) == {"v3", "x", "y", "z", "o"}
 
 
@@ -345,20 +350,22 @@ def test_the_excel_versions_have_checks_turned_on():
             assert version.check_records is True
 
 
-def test_mail_merge_versions_use_the_mail_merge_template():
+def test_mail_merge_versions_use_the_mail_merge_template(monkeypatch):
     """A docxtpl template in a Mail Merge version would come out blank."""
+    monkeypatch.setenv("DOCUMATE_TEMPLATE", "BIRTH_REG_FORMAT.docx")
+    monkeypatch.setenv("DOCUMATE_TEMPLATE_MM", "BIRTH_REG_FORMAT_MM.docx")
     for version in registry.VERSIONS.values():
         if version.engine == "mailmerge":
-            assert version.template.endswith("_MM.docx")
+            assert version.template_path().endswith("_MM.docx")
         else:
-            assert not version.template.endswith("_MM.docx")
+            assert not version.template_path().endswith("_MM.docx")
 
 
 # ---------------------------------------------------------------------------
 # The two database backends
 #
 # No database connection is made. These tests cover how the backend is
-# chosen from .env, the settings each backend receives, and the SQL each
+# chosen from config.env, the settings each backend receives, and the SQL each
 # one builds.
 # ---------------------------------------------------------------------------
 
@@ -372,7 +379,7 @@ from sources import queries_tsql
 
 @pytest.fixture
 def no_backend_set(monkeypatch):
-    """Clear DOCUMATE_DB_BACKEND and skip loading .env, so defaults apply."""
+    """Clear DOCUMATE_DB_BACKEND and skip loading config.env, so defaults apply."""
     monkeypatch.delenv("DOCUMATE_DB_BACKEND", raising=False)
     monkeypatch.setattr(config, "load_environment", lambda: None)
 
@@ -545,9 +552,12 @@ def test_pdf_is_off_unless_a_version_asks_for_it():
     assert version.to_pdf is False
 
 
-def test_both_engines_are_handed_the_pdf_setting():
+def test_both_engines_are_handed_the_pdf_setting(monkeypatch):
     """build_engine passes each version's to_pdf setting to its engine."""
     import versions
+
+    monkeypatch.setenv("DOCUMATE_TEMPLATE", "BIRTH_REG_FORMAT.docx")
+    monkeypatch.setenv("DOCUMATE_TEMPLATE_MM", "BIRTH_REG_FORMAT_MM.docx")
 
     for version in registry.VERSIONS.values():
         assert versions.build_engine(version).to_pdf == version.to_pdf

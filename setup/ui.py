@@ -20,7 +20,7 @@ TITLE = "DocuMate"
 
 def show_windows_popup(message):
     """Try to show a real Windows message box. Returns False if we can't."""
-    if not config.USE_POPUPS:
+    if not config.use_popups():
         return False
     if not sys.platform.startswith("win"):
         return False

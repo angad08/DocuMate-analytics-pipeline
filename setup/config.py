@@ -2,21 +2,28 @@
 Paths and settings for DocuMate.
 
 Everything DocuMate needs to find is decided here: the project folder, the
-.env settings file, the files/ folders, the Excel workbook, and the database
-connection details.
+config.env settings file, the files/ folders, and the database connection details.
 
-Secrets such as the database password are read from .env (see .env.example)
-and never written in the code.
+DocuMate is not tied to any one kind of document. Each run it needs an
+Excel workbook, a Word template and the column that identifies a row; when
+they are not in config.env, setup/picker.py asks for them and puts the answers in
+the environment under the same names, so everything here reads them the
+same way either way.
+
+Secrets such as the database password are read from config.env and never
+written in the code.
 
 Folder layout
 -------------
     <project root>/
         main.py
-        .env
+        config.env
         files/
-            data/        the Excel workbook
-            templates/   the Word templates
+            data/        Excel workbooks (any folder works - this is where
+                         the file picker opens)
+            templates/   Word templates (likewise)
             output/      generated .docx and .pdf files
+            last_run.json  last run's choices, used as the pickers' defaults
 """
 
 import os
@@ -42,61 +49,78 @@ def project_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-# Names accepted for the settings file, checked in the project root.
-# ".env" is the usual name. Windows Explorer makes it awkward to create a
-# file starting with a dot, so a few other names work too, as does any file
-# ending in ".env" (e.g. DocuMate_env.env).
-# ".env.example" is always skipped: it is the blank template.
-ENV_FILENAMES = [".env", "DocuMate_env", "env.txt"]
-ENV_SUFFIX = ".env"
-ENV_TEMPLATE = ".env.example"
+# The one settings file, in the project root.
+SETTINGS_FILENAME = "config.env"
 
 
 def env_file():
-    """
-    Return the path of the settings file, or None if there isn't one.
-
-    Checks ENV_FILENAMES in order first, then any other file ending in .env.
-    """
-    root = project_root()
-
-    for name in ENV_FILENAMES:
-        path = os.path.join(root, name)
-        if os.path.exists(path):
-            return path
-
-    try:
-        names = sorted(os.listdir(root))
-    except OSError:
-        return None
-
-    for name in names:
-        if name == ENV_TEMPLATE:
-            continue
-        if name.lower().endswith(ENV_SUFFIX):
-            path = os.path.join(root, name)
-            if os.path.isfile(path):
-                return path
-
-    return None
+    """Return the path of config.env, or None if there isn't one."""
+    path = os.path.join(project_root(), SETTINGS_FILENAME)
+    return path if os.path.isfile(path) else None
 
 
 def load_environment():
     """
-    Load the settings file into the environment, if python-dotenv is installed.
+    Load config.env into the environment, if python-dotenv is installed.
 
-    Variables already set in the environment are not overwritten. Without
-    python-dotenv, settings are read from the real environment only.
+    Variables already set in the environment are not overwritten. A line
+    left blank (DOCUMATE_EXCEL_PATH=) counts as not set, so it is asked for
+    or takes its default. Without python-dotenv, settings are read from the
+    real environment only.
     """
     try:
-        from dotenv import load_dotenv
+        from dotenv import dotenv_values
     except ImportError:
         return
 
     path = env_file()
-    if path:
-        load_dotenv(path, override=False)
+    if not path:
+        return
 
+    # utf-8-sig, because Notepad and PowerShell can save a file with an
+    # invisible byte-order mark at the start. Read as plain utf-8 it sticks
+    # to the first setting's name, and that setting - whatever is on line
+    # one - is silently ignored.
+    for name, value in dotenv_values(path, encoding="utf-8-sig").items():
+        if value and value.strip() and name not in os.environ:
+            os.environ[name] = value.strip()
+
+
+def setting(name, default):
+    """One setting: the text, or `default` when it is not set."""
+    load_environment()
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip()
+
+
+def required(name, what):
+    """
+    A setting that has no sensible default, or a clear error naming it.
+
+    By the time a run needs one of these, the picker has normally asked for
+    it, so this is reached by a run nobody could be asked in.
+    """
+    value = setting(name, "")
+    if value:
+        return value
+
+    raise ValueError(
+        name + " is not set.\n\n"
+        "It is " + what + ".\n"
+        "Run DocuMate and choose it when asked, or add it to config.env."
+    )
+
+
+def switch(name, default=True):
+    """An on/off setting: 0 is off, anything else is on."""
+    return setting(name, "1" if default else "0") != "0"
+
+
+# ---------------------------------------------------------------------------
+# Folders
+# ---------------------------------------------------------------------------
 
 def package_folder():
     """The folder holding main.py and files/. Currently the project root."""
@@ -125,33 +149,172 @@ def output_folder():
     return os.path.join(files_folder(), "output")
 
 
-# ---------------------------------------------------------------------------
-# Excel settings  (used by v3, X, Y)
-# ---------------------------------------------------------------------------
+def in_folder(folder, path):
+    """A full path as it is; a bare file name or relative path inside `folder`."""
+    path = os.path.expanduser(path)
+    if os.path.isabs(path):
+        return path
+    return os.path.join(folder, path)
 
-# Default workbook (in files/data) and sheet. Override with
-# DOCUMATE_EXCEL_PATH and DOCUMATE_SHEET_NAME in .env.
-EXCEL_FILENAME = "DocuMate_DataFrame.xlsx"
-# The sheet to read. This is the raw entry sheet now, not a prepared one:
-# the formulas that used to build a second sheet live in
-# sources/excel_format.py instead. A workbook that still has a prepared
-# sheet works too - point DOCUMATE_SHEET_NAME at it and it is used as it is.
-SHEET_NAME = "Sheet1"
 
+# ---------------------------------------------------------------------------
+# This run's files  (chosen when DocuMate starts, or set in config.env)
+# ---------------------------------------------------------------------------
 
 def excel_path():
-    """Full path to the workbook: DOCUMATE_EXCEL_PATH, or EXCEL_FILENAME in files/data."""
-    load_environment()
-    override = os.getenv("DOCUMATE_EXCEL_PATH")
-    if override:
-        return os.path.expanduser(override)
-    return os.path.join(data_folder(), EXCEL_FILENAME)
+    """The workbook, DOCUMATE_EXCEL_PATH. A bare file name is looked for in files/data."""
+    return in_folder(data_folder(), required(
+        "DOCUMATE_EXCEL_PATH", "the Excel workbook to read"))
 
 
 def sheet_name():
-    """The sheet to read: DOCUMATE_SHEET_NAME, or SHEET_NAME."""
-    load_environment()
-    return os.getenv("DOCUMATE_SHEET_NAME", SHEET_NAME)
+    """DOCUMATE_SHEET_NAME, or None for the first sheet in the workbook."""
+    return setting("DOCUMATE_SHEET_NAME", "") or None
+
+
+# Which setting holds the template for each engine. They are different
+# files: a {{ placeholder }} template prints its braces under Mail Merge, and
+# a Mail Merge template has no placeholders for docxtpl to fill.
+TEMPLATE_SETTINGS = {
+    "docxtpl": ("DOCUMATE_TEMPLATE",
+                "the Word template with {{ placeholders }}, used by v3 and Z"),
+    "mailmerge": ("DOCUMATE_TEMPLATE_MM",
+                  "the Word Mail Merge template, used by X, Y and O"),
+}
+
+
+def template_path(engine):
+    """The template for this engine. A bare file name is looked for in files/templates."""
+    name, what = TEMPLATE_SETTINGS[engine]
+    return in_folder(templates_folder(), required(name, what))
+
+
+# Characters Windows will not accept in a file name.
+UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*]+')
+
+
+def output_name():
+    """
+    The middle of the output file name: DocuMateX_<this>_21102026.docx
+
+    The template's own name, so FOREIGN_PCC_FORMAT.docx makes
+    DocuMateX_FOREIGN_PCC_FORMAT_21102026.docx and two kinds of document
+    never write files that look alike. DOCUMATE_OUTPUT_NAME replaces it.
+    """
+    name = setting("DOCUMATE_OUTPUT_NAME", "")
+    if not name:
+        for setting_name, _what in TEMPLATE_SETTINGS.values():
+            template = setting(setting_name, "")
+            if template:
+                name = os.path.splitext(os.path.basename(template))[0]
+                break
+    name = UNSAFE_FILENAME.sub("_", name or "DOCUMENTS").replace(" ", "_")
+    return name or "DOCUMENTS"
+
+
+# ---------------------------------------------------------------------------
+# How the rows are read
+# ---------------------------------------------------------------------------
+
+# plain            every column goes to the template under its own heading.
+# birth_register   the birth register's raw entry sheet, converted to its
+#                  certificate fields by sources/excel_format.py.
+#
+# Nobody has to choose: the picker recognises the birth register from its
+# column headings and sets DOCUMATE_DATA_FORMAT for the run.
+DATA_FORMATS = ["plain", "birth_register"]
+
+
+def data_format():
+    """plain or birth_register, from DOCUMATE_DATA_FORMAT."""
+    name = setting("DOCUMATE_DATA_FORMAT", "plain").lower() or "plain"
+    if name not in DATA_FORMATS:
+        raise ValueError(
+            "DOCUMATE_DATA_FORMAT is '" + name + "'. Use one of: "
+            + ", ".join(DATA_FORMATS)
+        )
+    return name
+
+
+def is_register():
+    """True when the rows are the birth register's and need converting."""
+    return data_format() == "birth_register"
+
+
+# The column a birth register row is known by. Its raw sheet calls it S No.
+REGISTER_ID_COLUMN = "Serial"
+
+
+def id_column():
+    """
+    The column that tells one row from another, DOCUMATE_ID_COLUMN.
+
+    Statuses are written back to the row with this value, so it must be
+    filled in and different on every row. The birth register's is fixed.
+    """
+    if is_register():
+        return REGISTER_ID_COLUMN
+    return required(
+        "DOCUMATE_ID_COLUMN",
+        "the column that identifies each row, used to mark rows done")
+
+
+# The birth register's own column rules. Its raw sheet is checked column by
+# column, because several columns are joined into one certificate field and
+# a gap inside the join would otherwise print as a stray comma.
+#
+# ADD 2 and ADD 3 are optional because an address does not always need
+# three lines. ADD 1 is not: an address has to start somewhere, and a blank
+# first line with a filled second one is a data-entry slip.
+REGISTER_DATE_COLUMNS = ["Registration_date"]
+REGISTER_OPTIONAL_COLUMNS = ["ADD 2", "ADD 3"]
+REGISTER_DUPLICATE_COLUMN = "File_Number"
+
+# The progress columns. DocuMate fills them in, so they may always be blank.
+STATE_COLUMNS_OPTIONAL = ["STATUS", "Date_Printed", "Date_Issued"]
+
+
+def date_columns():
+    """
+    Columns checked and printed as dd/mm/yyyy beyond the ones Excel already
+    holds as dates - which are formatted whatever kind of document it is.
+    """
+    return list(REGISTER_DATE_COLUMNS) if is_register() else []
+
+
+def optional_columns():
+    """
+    Columns the birth register allows to be blank. Any other sheet is
+    checked only on the columns its template uses - see flow/checks.py.
+    """
+    extra = REGISTER_OPTIONAL_COLUMNS if is_register() else []
+    return STATE_COLUMNS_OPTIONAL + extra
+
+
+def duplicate_column():
+    """The column checked for the same record entered twice."""
+    return REGISTER_DUPLICATE_COLUMN if is_register() else id_column()
+
+
+def sort_column():
+    """The column documents are ordered by: the number in the ID column."""
+    return id_column()
+
+
+def file_number_prefix():
+    """
+    DOCUMATE_FILE_PREFIX: what every File_Number must start with.
+
+    File numbers are issued with a fixed prefix, so one that does not start
+    with it is either a typo or a record from somewhere else. Empty turns
+    the check off; it only applies to a File_Number column.
+    """
+    return setting("DOCUMATE_FILE_PREFIX", "")
+
+
+def mha_file_prefix():
+    """DOCUMATE_MHA_PREFIX: the same check for an MHA_File_No column."""
+    return setting("DOCUMATE_MHA_PREFIX", "")
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +339,7 @@ def database_backend():
 
     The other connection settings (host, name, user, password) have the
     same names for both backends, so switching only needs this one value
-    changed in .env.
+    changed in config.env.
 
     Raises ValueError for an unknown name.
     """
@@ -196,7 +359,7 @@ def database_backend():
 # Allowed schema names: letters, digits and underscores, not starting with
 # a digit. The schema is written into the SQL text (databases do not accept
 # a schema name as a query parameter), so it is checked against this
-# pattern first to rule out SQL injection through .env.
+# pattern first to rule out SQL injection through config.env.
 SCHEMA_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -228,7 +391,7 @@ def database_schema():
 
 def database_settings():
     """
-    Return the database connection details from .env as a dict.
+    Return the database connection details from config.env as a dict.
 
         host, database, user, password   required
         port                             DOCUMATE_DB_PORT, or the backend's default
@@ -263,7 +426,7 @@ def database_settings():
 
     if missing:
         raise ValueError(
-            "Database settings missing. Add these to your .env file: "
+            "Database settings missing. Add these to your config.env file: "
             + ", ".join(missing)
         )
 
@@ -279,29 +442,48 @@ def database_settings():
     return settings
 
 
+def database_identifier(name, value):
+    """
+    A table or column name, checked the same way as the schema.
+
+    Like the schema, these are written into the SQL text, so anything that
+    is not a plain identifier is refused rather than run.
+    """
+    if value and not SCHEMA_NAME.match(value):
+        raise ValueError(
+            name + " is '" + value + "', which is not a plain name. Use "
+            "letters, digits and underscores only - for example: student_id"
+        )
+    return value
+
+
+def database_table():
+    """
+    The table Z and O read, DOCUMATE_DB_TABLE: every column of it, and each
+    column becomes a template field.
+
+    Empty means the birth register's own joined tables (sources/queries_*.py).
+    """
+    return database_identifier("DOCUMATE_DB_TABLE", setting("DOCUMATE_DB_TABLE", ""))
+
+
+def database_id_column():
+    """The column that identifies a row in DOCUMATE_DB_TABLE (default id)."""
+    return database_identifier("DOCUMATE_DB_ID_COLUMN",
+                               setting("DOCUMATE_DB_ID_COLUMN", "") or "id")
+
+
 # ---------------------------------------------------------------------------
-# Switches
+# Fixed rules
 # ---------------------------------------------------------------------------
 
-# Columns allowed to be empty. Every other column must have a value.
-#
-# ADD 2 and ADD 3 are in here because an address does not always need three
-# lines. Some applicants write the whole thing on the first line. ADD 1 is
-# not optional: an address has to start somewhere, and a blank first line
-# with a filled second one is a data-entry slip rather than a short address.
-OPTIONAL_COLUMNS = [
-    "STATUS", "Date_Printed", "Date_Issued",
-    "ADD 2", "ADD 3",
-]
-
-
-# How every date is written on a certificate, whatever shape it arrived in.
+# How every date is written on a document, whatever shape it arrived in.
 DATE_FORMAT = "%d/%m/%Y"
 
 # Dates typed as text are read day-first, and only with these separators.
 # "03/04/2025" is the 3rd of April, never the 4th of March - the parser is
 # never allowed to guess, because a silent day/month swap is invisible on a
-# finished certificate.
+# finished document.
 #
 # "." is deliberately NOT here. Operators do type 8.11.26, and accepting it
 # would read correctly - but it would also stop the report mentioning it, and
@@ -310,35 +492,9 @@ DATE_FORMAT = "%d/%m/%Y"
 # here if you would rather the tool took it quietly.
 DATE_SEPARATORS = ["/", "-"]
 
-
-# File numbers are issued with a fixed prefix, so one that does not start
-# with it is either a typo or a record from somewhere else. Melbourne issues
-# AU...; the synthetic workbook in this repository uses IND/MEL/.
-#
-# Leave a prefix empty to turn its check off. MHA file numbers are empty by
-# default because the real ones carry no prefix at all - they are plain
-# twelve-digit numbers - while the synthetic ones use MHA/IND/.
-# Both are empty by default, which turns the check off. The prefix is not
-# the same everywhere - Melbourne issues AU..., the synthetic workbook here
-# uses IND/MEL/, and real MHA numbers carry no prefix at all - so there is
-# no sensible value to assume. Set the one your register uses:
-#
-#     DOCUMATE_FILE_PREFIX=AU
-#
-# and a record numbered by somewhere else stops the run instead of being
-# printed on your stationery.
-FILE_NUMBER_PREFIX = os.getenv("DOCUMATE_FILE_PREFIX", "")
-MHA_FILE_PREFIX = os.getenv("DOCUMATE_MHA_PREFIX", "")
-
-# The column used to find the same applicant entered twice.
-DUPLICATE_KEY = "File_Number"
-
-# The column records are sorted by, using its number ("123/2025" sorts as 123).
-SORT_COLUMN = "Serial"
-
-# The status a record starts with, used when a raw sheet has no STATUS
-# column yet. Anything that is not DONE_STATUS counts as pending, so the
-# exact wording matters only to whoever reads the sheet.
+# The status a record starts with, used when a sheet has no STATUS column
+# yet. Anything that is not finished counts as pending, so the exact
+# wording matters only to whoever reads the sheet.
 PENDING_STATUS = "IN PROCESS"
 
 
@@ -347,7 +503,7 @@ PENDING_STATUS = "IN PROCESS"
 # not printed leaves records here, which says what actually happened.
 COMPLETED_STATUS = "COMPLETED"
 
-# The status that means a certificate has been sent to a printer.
+# The status that means a document has been sent to a printer.
 DONE_STATUS = "PRINTED"
 
 # Statuses that mean a record needs no more work. Anything else is pending,
@@ -361,20 +517,27 @@ FINISHED_STATUSES = [COMPLETED_STATUS, DONE_STATUS]
 # recognised by their port: Windows gives Print to PDF and XPS the
 # PORTPROMPT: port, OneNote nul:, and Fax SHRFAX:. Worth naming, because
 # "Microsoft Print to PDF" is the default printer on a lot of machines and
-# sending a hundred certificates to it produces nothing and looks like it
+# sending a hundred documents to it produces nothing and looks like it
 # worked.
 VIRTUAL_PRINTER_PORTS = ["PORTPROMPT:", "NUL:", "SHRFAX:"]
 
-# Add the current year to every record, so templates don't need it typed in.
-# Set to False to turn it off.
+# Add the current year to every record as {{ year }}, so templates don't
+# need it typed in. Set to False to turn it off.
 INJECT_YEAR = True
 
-# Show Windows popup messages. Set DOCUMATE_POPUPS=0 to print to the console
-# instead. Popups are turned off automatically when not on Windows.
-USE_POPUPS = os.getenv("DOCUMATE_POPUPS", "1") != "0"
+
+def use_popups():
+    """
+    Show Windows popup messages. DOCUMATE_POPUPS=0 prints to the console
+    instead. Popups are turned off automatically when not on Windows.
+    """
+    return switch("DOCUMATE_POPUPS")
 
 
-# Offer to print after generating. Set DOCUMATE_PRINTING=0 for an office
-# that prints the merged file by hand, or for an unattended run where there
-# is nobody to answer the question.
-OFFER_PRINTING = os.getenv("DOCUMATE_PRINTING", "1") != "0"
+def offer_printing():
+    """
+    Offer to print after generating. DOCUMATE_PRINTING=0 for an office that
+    prints the merged file by hand, or for an unattended run where there is
+    nobody to answer the question.
+    """
+    return switch("DOCUMATE_PRINTING")

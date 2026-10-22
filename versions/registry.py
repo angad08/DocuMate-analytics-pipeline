@@ -15,15 +15,20 @@ Settings
     label             name shown in messages
     source            "excel" or "database"
                       ("database" uses Azure SQL or PostgreSQL, whichever
-                       DOCUMATE_DB_BACKEND in .env selects)
+                       DOCUMATE_DB_BACKEND in config.env selects)
     engine            "docxtpl" (Python fills the template) or
                       "mailmerge" (Word fills it)
-    template          template file name in files/templates
+    template          None: the template chosen when the run starts. A
+                      file name here ties the version to that one template.
     output_prefix     start of the output file name
     check_records     run the record checks in flow/checks.py
                       (off for database versions, which filter in SQL)
-    date_columns      columns to format as dd/mm/yyyy
-                      (empty for database versions, which format on read)
+    date_columns      None: worked out from the sheet (Excel versions).
+                      The database versions pass [], they format on read.
+
+Nothing here says what is being generated - that is whichever Excel file
+and Word template are chosen at the start - so every version works for any
+kind of document.
     batch_size        mailmerge only: records per Word merge;
                       None merges everything at once
     max_workers       docxtpl only: records filled at the same time
@@ -34,15 +39,7 @@ Settings
                       the same name in the same folder. Needs Word.
 """
 
-import os
-
 from setup import config
-
-
-# Template files in files/templates. The _MM file is for the Mail Merge
-# engine; the other uses docxtpl {{ placeholders }}.
-TEMPLATE_DOCXTPL = "DOCUMENT_TEMPLATE_FILE.docx"
-TEMPLATE_MAILMERGE = "DOCUMENT_TEMPLATE_FILE_MM.docx"
 
 
 class Version:
@@ -53,8 +50,8 @@ class Version:
                  label,
                  source,
                  engine,
-                 template,
-                 output_prefix,
+                 template=None,
+                 output_prefix="DocuMate",
                  check_records=True,
                  date_columns=None,
                  batch_size=None,
@@ -72,7 +69,7 @@ class Version:
         self.template = template
         self.output_prefix = output_prefix
         self.check_records = check_records
-        self.date_columns = date_columns or []
+        self.own_date_columns = date_columns
         self.batch_size = batch_size
         self.max_workers = max_workers
         self.timestamp_format = timestamp_format
@@ -81,9 +78,26 @@ class Version:
         self.to_pdf = to_pdf
         self.notes = notes
 
+    @property
+    def date_columns(self):
+        """
+        Columns to format as dd/mm/yyyy: the version's own list when it has
+        one, otherwise the sheet's (see config.date_columns).
+        """
+        if self.own_date_columns is not None:
+            return self.own_date_columns
+        return config.date_columns()
+
     def template_path(self):
-        """Full path to this version's template file."""
-        return os.path.join(config.templates_folder(), self.template)
+        """
+        Full path to this version's template: the case's template for this
+        engine, or the version's own file when it names one.
+
+        Raises ValueError naming the setting when the case has not set it.
+        """
+        if self.template:
+            return config.in_folder(config.templates_folder(), self.template)
+        return config.template_path(self.engine)
 
     def output_folder(self):
         """Folder the output files are saved in."""
@@ -104,10 +118,8 @@ VERSIONS["v3"] = Version(
     label="v3",
     source="excel",
     engine="docxtpl",
-    template=TEMPLATE_DOCXTPL,
     output_prefix="DocuMatePLUS",
     check_records=True,
-    date_columns=["Registration_date"],
     max_workers=10,
     to_pdf=True,
     notes="Excel + docxtpl. The production version.",
@@ -121,10 +133,8 @@ VERSIONS["x"] = Version(
     label="X",
     source="excel",
     engine="mailmerge",
-    template=TEMPLATE_MAILMERGE,
     output_prefix="DocuMateX",
     check_records=True,
-    date_columns=["Registration_date"],
     batch_size=250,
     to_pdf=True,
     notes="Excel + Word Mail Merge, 250 at a time. Fastest version.",
@@ -138,10 +148,8 @@ VERSIONS["y"] = Version(
     label="Y",
     source="excel",
     engine="mailmerge",
-    template=TEMPLATE_MAILMERGE,
     output_prefix="DocuMateY",
     check_records=True,
-    date_columns=["Registration_date"],
     batch_size=None,
     to_pdf=True,
     notes="Excel + Word Mail Merge, all in one go. Small runs only.",
@@ -156,7 +164,6 @@ VERSIONS["z"] = Version(
     label="Z",
     source="database",
     engine="docxtpl",
-    template=TEMPLATE_DOCXTPL,
     output_prefix="DocuMateZ",
     check_records=False,
     date_columns=[],
@@ -175,7 +182,6 @@ VERSIONS["o"] = Version(
     label="O",
     source="database",
     engine="mailmerge",
-    template=TEMPLATE_MAILMERGE,
     output_prefix="DocuMateO",
     check_records=False,
     date_columns=[],

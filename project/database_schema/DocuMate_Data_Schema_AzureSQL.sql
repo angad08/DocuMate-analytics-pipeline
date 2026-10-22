@@ -27,7 +27,7 @@
 --
 -- Tables are created in your login's default schema, normally dbo. To put
 -- them somewhere else, create that schema first, make it your default, and
--- set DOCUMATE_DB_SCHEMA to the same name in .env.
+-- set DOCUMATE_DB_SCHEMA to the same name in config.env.
 -- =========================================================
 
 

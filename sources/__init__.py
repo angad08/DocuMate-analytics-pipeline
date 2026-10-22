@@ -15,7 +15,7 @@ Because every source returns the same shape of table, the rest of the
 pipeline works the same whichever source a version uses.
 
 Z and O use one of the two database backends, chosen by DOCUMATE_DB_BACKEND
-in .env. The backend classes are not imported at the top of this file,
+in config.env. The backend classes are not imported at the top of this file,
 because importing one also imports its database driver. make_database_source()
 below imports only the backend that is selected, so you only need that
 backend's driver installed.
@@ -29,7 +29,7 @@ def make_database_source():
     """
     Open a connection to the selected database and return its source object.
 
-    The backend comes from DOCUMATE_DB_BACKEND in .env, not from the caller,
+    The backend comes from DOCUMATE_DB_BACKEND in config.env, not from the caller,
     so everything that talks to the database agrees on which one it is:
     versions/__init__.py builds Z and O from this, and tools/seed_database.py
     uses it too.
@@ -53,4 +53,9 @@ def make_database_source():
     module = importlib.import_module(backend["module"])
     source_class = getattr(module, backend["cls"])
 
-    return source_class(config.database_settings(), config.database_schema())
+    return source_class(
+        config.database_settings(),
+        config.database_schema(),
+        config.database_table(),
+        config.database_id_column(),
+    )

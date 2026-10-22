@@ -116,6 +116,18 @@ def looks_prepared(frame):
     return all(column in frame.columns for column in PREPARED_MARKERS)
 
 
+def is_register_sheet(frame):
+    """
+    True when this is the birth register - its raw entry sheet, or a sheet
+    already in certificate shape - recognised by its column headings.
+
+    "Most of the raw columns" counts, so that a register with one renamed
+    heading is still treated as one and stopped with that heading named,
+    rather than being read as some other kind of sheet.
+    """
+    return looks_prepared(frame) or raw_columns_found(frame) >= len(RAW_COLUMNS) / 2
+
+
 def actual_header(frame, header):
     """The column in `frame` that answers to `header`, or None."""
     for name in RAW_ALIASES.get(header, [header]):
@@ -405,11 +417,69 @@ def transform(frame):
     return prepared
 
 
+def whole_numbers(column):
+    """
+    True for a column of numbers with nothing after the point.
+
+    pandas reads a number column that has one blank cell in it as decimals,
+    so roll number 12 would print as "12.0".
+    """
+    if not pd.api.types.is_float_dtype(column):
+        return False
+    filled = column.dropna()
+    return not filled.empty and bool((filled == filled.round()).all())
+
+
+def prepare_plain(frame):
+    """
+    Hand back a case's sheet with its own columns, ready for the checks.
+
+    Used for every case except the birth register (DOCUMATE_DATA_FORMAT=plain,
+    the default). The header row becomes the field
+    names in the template, so nothing is renamed or combined. Only three
+    things are done to it:
+
+      - text is stripped, and non-breaking spaces become ordinary ones,
+        for the same reason as as_text()
+      - whole numbers stay whole numbers instead of printing as 12.0
+      - a STATUS column is supplied when the sheet has none, so every row
+        starts pending; it is added to the sheet itself on the first write
+
+    The ID column is checked here, before anything is generated. Without it
+    the documents would be made and only the status write-back would fail.
+    """
+    id_name = config.id_column()
+    if id_name not in frame.columns:
+        raise ValueError(messages.NO_ID_COLUMN.format(
+            column=id_name, columns=", ".join(str(c) for c in frame.columns)))
+
+    prepared = frame.copy()
+
+    for name in prepared.columns:
+        column = prepared[name]
+        if whole_numbers(column):
+            prepared[name] = column.astype("Int64")
+        elif column.dtype == object:
+            prepared[name] = [
+                as_text(value) if isinstance(value, str) else value
+                for value in column
+            ]
+
+    if "STATUS" not in prepared.columns:
+        prepared["STATUS"] = config.PENDING_STATUS
+
+    return prepared
+
+
 def prepare(frame):
     """
     Hand back a table in certificate shape, whatever shape came in.
 
-    Three outcomes, and the middle one is the important one:
+    Only a case with DOCUMATE_DATA_FORMAT=birth_register is converted. Every
+    other case keeps its own columns and goes through prepare_plain().
+
+    For the birth register there are three outcomes, and the middle one is
+    the important one:
 
     A sheet that is already prepared is returned untouched.
 
@@ -423,6 +493,9 @@ def prepare(frame):
     A sheet with none of the raw columns is something else entirely, so it
     is passed through and the ordinary checks describe it.
     """
+    if not config.is_register():
+        return prepare_plain(frame)
+
     if looks_prepared(frame):
         return frame
 

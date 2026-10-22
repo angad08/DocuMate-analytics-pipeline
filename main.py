@@ -8,12 +8,16 @@ DocuMate - run any version from here.
     python main.py o     database + Word Mail Merge
 
     (z and o read Azure SQL or PostgreSQL, as set by DOCUMATE_DB_BACKEND
-     in .env. --check shows which one is selected.)
+     in config.env. --check shows which one is selected.)
 
     python main.py --list    show every version and what it uses
     python main.py --check   check the setup and stop
     python main.py z --once  run Z once instead of on a loop
     python main.py x --poll  make any version check on a loop
+
+Any Excel file and Word template work: every version asks for both when it
+starts, unless they are filled in config.env, and fills each
+{{ placeholder }} in the template from the column with that heading.
 
 """
 
@@ -130,8 +134,8 @@ def check_setup():
     """
     Print what DocuMate can and cannot find (python main.py --check).
 
-    Sections: FOLDERS, FILES (workbook and templates), PACKAGES, and
-    DATABASE SETTINGS. Run it first when something is not working. The
+    Sections: FOLDERS, FILES (the workbook and templates in use), PACKAGES,
+    and DATABASE SETTINGS. Run it first when something is not working. The
     password is never printed, only whether it is set.
     """
     import os
@@ -150,17 +154,23 @@ def check_setup():
         mark = "ok     " if os.path.exists(path) else "MISSING"
         print("  %-8s %s  %s" % (label, mark, path))
 
-    print("\nFILES")
-    excel = config.excel_path()
-    print("  %-8s %s  %s" % ("workbook",
-                             "ok     " if os.path.exists(excel) else "MISSING",
-                             excel))
-
-    for version in versions.VERSIONS.values():
-        path = version.template_path()
-        if os.path.exists(path):
+    print("\nFILES  (asked for when a run starts, unless set in config.env)")
+    from setup import picker
+    memory = picker.load_memory()
+    for label, name, remembered in [
+        ("workbook", "DOCUMATE_EXCEL_PATH", memory.get("excel")),
+        ("template", "DOCUMATE_TEMPLATE", memory.get("templates", {}).get("docxtpl")),
+        ("template (MM)", "DOCUMATE_TEMPLATE_MM", memory.get("templates", {}).get("mailmerge")),
+    ]:
+        value = config.setting(name, "")
+        source = "from config.env"
+        if not value and remembered:
+            value, source = remembered, "last run"
+        if not value:
+            print("  %-14s asked for at the start of a run" % label)
             continue
-        print("  template MISSING  %s   (needed by %s)" % (path, version.label))
+        mark = "ok     " if os.path.exists(value) else "MISSING"
+        print("  %-14s %s  %s   (%s)" % (label, mark, value, source))
 
     print("\nPACKAGES")
     for name, module in [
@@ -186,8 +196,7 @@ def check_setup():
     settings_file = config.env_file()
 
     if not settings_file:
-        print("  no settings file found in the project root.")
-        print("  expected one named .env, or anything ending in .env")
+        print("  no config.env found in the project folder.")
     else:
         print("  reading  %s" % settings_file)
 
@@ -229,9 +238,13 @@ def main(argv=None):
     """
     Run DocuMate with the given arguments (sys.argv when None).
 
-    --check and --list print and stop. Otherwise the version is built and
-    run, once or on a loop depending on its poll setting and the flags.
+    --check and --list print and stop. Otherwise the files are chosen, and
+    the version is built and run, once or on a loop depending on its poll
+    setting and the flags.
     """
+    from setup import picker
+    from setup import ui
+
     args = build_parser().parse_args(argv)
 
     if args.check:
@@ -243,7 +256,15 @@ def main(argv=None):
         return 0
 
     version = versions.get(args.version)
-    pipeline = versions.build(args.version)
+
+    # Which workbook and template: from config.env, or asked. Then
+    # building opens them, so a file that is not there stops it here.
+    try:
+        picker.prepare_run(version)
+        pipeline = versions.build(args.version)
+    except (ValueError, OSError) as error:
+        ui.notify(str(error))
+        return 1
 
     # Start from the version's own poll setting; --poll or --once override it.
     poll = version.poll

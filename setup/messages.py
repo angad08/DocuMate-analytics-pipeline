@@ -26,7 +26,7 @@ GENERATING = "DocuMate : Generating and merging {count} documents...\n"
 RECORD_PROGRESS = "DocuMate : [{bar}] {percent:3d}%  {done}/{total} records"
 CREATING_FOLDER = "\nDocuMate : Output folder '{folder}' does not exist. Creating it..."
 SAVED = (
-    "\nDocuMate : Generated and merged {count} documents (in Serial order)"
+    "\nDocuMate : Generated and merged {count} documents (in ID order)"
     " in {seconds:.2f} seconds and saved in:\n{path}"
 )
 NOTHING_TO_MERGE = "DocuMate : No records found for merging."
@@ -166,6 +166,73 @@ RAW_SHEET_INCOMPLETE = (
     "columns were found.\n\n"
     "Missing: {missing}\n\n"
     "Check the column headings in the sheet. Nothing has been generated."
+)
+
+# --- Choosing the files (setup/picker.py) ---------------------------------
+# The template picked was made for the other engine. Common in a file
+# picker - BIRTH_REG_FORMAT.docx and BIRTH_REG_FORMAT_MM.docx sit side by
+# side - and the wrong one prints documents with every value missing.
+WRONG_TEMPLATE_KIND = {
+    "docxtpl": (
+        "{template} is a Word Mail Merge template, but {version} fills\n"
+        "{{{{ placeholder }}}} templates.\n\n"
+        "Pick the template without _MM, or run X or Y to use this one."
+    ),
+    "mailmerge": (
+        "{template} is a {{{{ placeholder }}}} template, but {version} uses\n"
+        "Word Mail Merge.\n\n"
+        "Pick the _MM template, or run v3 to use this one."
+    ),
+}
+TYPE_PATH = "DocuMate : {title} - type or paste its path: "
+NOTHING_CHOSEN = "No file or column was chosen, so nothing has been generated."
+CHOOSE_SHEET_HEADING = "\nDocuMate : {workbook} has more than one sheet:"
+CHOOSE_SHEET = "Sheet to read"
+CHOOSE_ID_HEADING = (
+    "\nDocuMate : Which column identifies each row? It must be filled in and\n"
+    "           different on every row - each row is marked done by it."
+)
+CHOOSE_ID = "ID column"
+RUN_FILES = (
+    "DocuMate : Excel {excel} (sheet {sheet}), template {template}, "
+    "rows identified by {id}.\n"
+)
+RUN_TEMPLATE = "DocuMate : Template {template}.\n"
+
+# The template asks for something the sheet does not have. Usually a typo
+# in a placeholder or a renamed heading; either way every document would
+# print with that gap, so it stops.
+TEMPLATE_FIELDS_MISSING = (
+    "The template asks for {count} field(s) the sheet does not have:\n\n"
+    "    {fields}\n\n"
+    "Each placeholder must match a column heading - \"Passport No\" is\n"
+    "{{{{ Passport_No }}}}. Columns in the sheet:\n\n"
+    "    {columns}\n\n"
+    "Fix the placeholder or the heading. Nothing has been generated."
+)
+
+# Blank cells in columns the template prints. Sometimes that is right - a
+# Remarks column - so someone at the keyboard is asked rather than refused.
+BLANKS_ASK = (
+    "DocuMate : {count} row(s) have blank cells in fields the template prints\n"
+    "           (listed above). Generate anyway, leaving them blank? (yes/no): "
+)
+
+# A case's sheet without the column that tells its rows apart. Caught on
+# read, because the documents would otherwise be made and only the status
+# write-back would fail.
+NO_ID_COLUMN = (
+    "The sheet has no \"{column}\" column.\n\n"
+    "DocuMate uses it to tell the rows apart and to mark each one done, so\n"
+    "every row needs a different value in it. Add the column, or set\n"
+    "DOCUMATE_ID_COLUMN in config.env to one the sheet already has.\n\n"
+    "Columns in this sheet: {columns}\n\n"
+    "Nothing has been generated."
+)
+EXCEL_NO_ID_COLUMN = "DocuMate : {column} column not found - cannot update Excel."
+DB_NO_ID_COLUMN = (
+    "Table {table} has no column called {column}, so the rows cannot be\n"
+    "marked done. Set DOCUMATE_DB_ID_COLUMN in config.env to the table's ID column."
 )
 
 

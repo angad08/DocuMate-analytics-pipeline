@@ -56,17 +56,28 @@ PENDING_APPLICANTS = """
     ORDER BY a.serial;
 """
 
-# Returns a row if applicant.date_issued exists. Older databases may not
-# have this column.
+# Any other case study: every column of one table, DOCUMATE_DB_TABLE, for
+# the rows not yet done. The column names become the template fields.
+# {table} and {id} are filled in by DatabaseSource.sql(), from names that
+# have been checked to be plain identifiers.
+PENDING_ROWS = """
+    SELECT *
+    FROM {schema}{table}
+    WHERE UPPER(COALESCE(status, '')) NOT IN ('COMPLETED', 'PRINTED')
+    ORDER BY {id};
+"""
+
+# Returns a row if <table>.date_issued exists. Older databases may not
+# have this column. {table} is applicant for the birth register.
 DATE_ISSUED_EXISTS = """
     SELECT 1
     FROM information_schema.columns
-    WHERE table_name = 'applicant'
+    WHERE table_name = '{table}'
       AND column_name = 'date_issued'{schema_filter};
 """
 
 # T-SQL uses ADD, not ADD COLUMN.
-ADD_DATE_ISSUED_COLUMN = "ALTER TABLE {schema}applicant ADD date_issued DATE;"
+ADD_DATE_ISSUED_COLUMN = "ALTER TABLE {schema}{table} ADD date_issued DATE;"
 
 # Set the given serials to PRINTED with today's date.
 #
@@ -77,10 +88,10 @@ ADD_DATE_ISSUED_COLUMN = "ALTER TABLE {schema}applicant ADD date_issued DATE;"
 # Rows that are already PRINTED are skipped, so running it twice does not
 # change their date_issued.
 MARK_PRINTED = """
-    UPDATE {schema}applicant
+    UPDATE {schema}{table}
     SET status = ?,
         date_issued = ?
-    WHERE serial IN ({serials})
+    WHERE {id} IN ({serials})
       AND COALESCE(UPPER(status), '') <> 'PRINTED';
 """
 

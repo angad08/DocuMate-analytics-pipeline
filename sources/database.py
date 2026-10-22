@@ -14,7 +14,7 @@ A backend only supplies the parts that differ between the two databases:
     sources/postgres.py   psycopg2  + sources/queries_postgres.py
     sources/azuresql.py   pyodbc    + sources/queries_tsql.py
 
-Which backend runs is set by DOCUMATE_DB_BACKEND in .env (read in
+Which backend runs is set by DOCUMATE_DB_BACKEND in config.env (read in
 setup/config.py, used in versions/__init__.py).
 
 Flow
@@ -31,6 +31,7 @@ import datetime
 
 import pandas as pd
 
+from setup import config
 from setup import messages
 from sources.excel_format import full_sex
 from sources.excel_format import serial_for
@@ -147,7 +148,15 @@ class DatabaseSource:
 
     settings   connection details from config.database_settings()
     schema     schema name from DOCUMATE_DB_SCHEMA; "" uses the default
+    table      DOCUMATE_DB_TABLE; "" is the birth register. Any other
+               table is read whole, and its column names are the fields.
+    id_column  DOCUMATE_DB_ID_COLUMN: which column marks a row done
     """
+
+    # The birth register's table and its ID column, used when no table is
+    # named in config.env.
+    REGISTER_TABLE = "applicant"
+    REGISTER_ID = "serial"
 
     # Name used in messages, e.g. "Reading PostgreSQL...".
     label = "database"
@@ -162,10 +171,12 @@ class DatabaseSource:
     # MAX_SERIALS_PER_UPDATE in queries_tsql.py.
     update_batch_size = 300
 
-    def __init__(self, settings, schema=""):
+    def __init__(self, settings, schema="", table="", id_column=""):
         # An empty schema means the connection's default schema:
         # dbo on Azure SQL, public on PostgreSQL.
         self.schema = schema
+        self.table = table
+        self.id_column = (id_column or self.REGISTER_ID) if table else self.REGISTER_ID
         self.connection = self.connect(settings)
         self.cursor = self.connection.cursor()
 
@@ -182,7 +193,11 @@ class DatabaseSource:
             {schema_filter}  an extra "AND table_schema = '...'" condition
                              for the information_schema lookup
 
-        With no schema set, both placeholders become empty strings.
+            {table}          DOCUMATE_DB_TABLE, or applicant
+            {id}             DOCUMATE_DB_ID_COLUMN, or serial
+
+        With no schema set, both schema placeholders become empty strings.
+        All three names were checked to be plain identifiers in config.
         """
         if self.schema:
             prefix = self.schema + "."
@@ -191,7 +206,9 @@ class DatabaseSource:
             prefix = ""
             condition = ""
 
-        return template.format(schema=prefix, schema_filter=condition)
+        return template.format(schema=prefix, schema_filter=condition,
+                               table=self.table or self.REGISTER_TABLE,
+                               id=self.id_column)
 
     # -- implemented by each backend ----------------------------------------
 
@@ -222,6 +239,9 @@ class DatabaseSource:
         The SQL already filters out PRINTED records, which is why Z and O
         have check_records=False in versions/registry.py.
         """
+        if self.table:
+            return self.load_table()
+
         self.cursor.execute(self.sql(self.queries.PENDING_APPLICANTS))
         rows = self.cursor.fetchall()
 
@@ -233,6 +253,49 @@ class DatabaseSource:
         # Passing the column names gives the table the right columns even
         # when there are no rows.
         return pd.DataFrame(records, columns=TEMPLATE_FIELDS)
+
+    def load_table(self):
+        """
+        Read the pending rows of DOCUMATE_DB_TABLE, every column as it is.
+
+        The column names come from the database, so whatever the table calls
+        a column is what the template calls the field. Dates are written
+        dd/mm/yyyy here, the same as the register's, because nothing later
+        in a database run formats them.
+        """
+        self.cursor.execute(self.sql(self.queries.PENDING_ROWS))
+        columns = [column[0] for column in self.cursor.description]
+
+        records = []
+        for row in self.cursor.fetchall():
+            records.append([
+                as_date(value) if isinstance(value, datetime.date) else value
+                for value in row
+            ])
+
+        return pd.DataFrame(records, columns=columns)
+
+    def row_ids(self, data):
+        """
+        The IDs of these records, as the UPDATE needs them.
+
+        The register's serials come back as "123/2025" and are stored as
+        123. Any other table's IDs are sent exactly as they were read, found
+        by name without regard to case - SQL Server keeps the case it was
+        given, PostgreSQL folds it to lower.
+        """
+        if not self.table:
+            return [int(str(value).split("/")[0]) for value in data["Serial"]]
+
+        name = next((c for c in data.columns
+                     if str(c).lower() == self.id_column.lower()), None)
+        if name is None:
+            raise ValueError(messages.DB_NO_ID_COLUMN.format(
+                column=self.id_column, table=self.table))
+
+        # numpy numbers are not something either driver knows how to send.
+        return [value.item() if hasattr(value, "item") else value
+                for value in data[name]]
 
     def close(self):
         """Close the cursor and the connection. Safe to call more than once."""
@@ -275,10 +338,9 @@ class DatabaseSource:
                 self.cursor.execute(self.sql(self.queries.ADD_DATE_ISSUED_COLUMN))
                 self.connection.commit()
 
-            # Get the numbers back out of the serials: "123/2025" -> 123
-            serials = []
-            for value in data["Serial"]:
-                serials.append(int(str(value).split("/")[0]))
+            # Get the numbers back out of the serials: "123/2025" -> 123,
+            # or the ID column as it is for any other table.
+            serials = self.row_ids(data)
 
             today = datetime.date.today()
             updated = 0

@@ -98,7 +98,7 @@ Run the Excel-based production workflow:
 python main.py v3
 ```
 
-The Excel versions (`v3`, `x`, `y`) run from the synthetic workbook in `files/data/`. The Mail Merge versions (`x`, `y`, `o`) require Microsoft Word on Windows. Generated documents go to `files/output/`, which is intentionally ignored by Git.
+Each run asks for the Excel file and Word template with a file picker, unless `DOCUMATE_EXCEL_PATH` and the template setting are set in `config.env`. The picker opens in the folder used last time, and those choices are kept in `files/last_run.json`, which is ignored by Git. The Excel versions are `v3`, `x` and `y`. The repository ships one worked sample, `files/data/SAMPLE_CASE_STUDY.xlsx` with `files/templates/SAMPLE_CASE_STUDY.docx`; birth-register workbooks and templates are not included. The Mail Merge versions (`x`, `y`, `o`) require Microsoft Word on Windows. Generated documents go to `files/output/`, which is intentionally ignored by Git.
 
 Your own workbook needs a `Signing_Authority` column before a run will start; see [The Excel sheet](#the-excel-sheet).
 
@@ -114,7 +114,7 @@ python packaging\build_exe.py v3 x     # or just some
 ```
 
 The exes are written to `dist\`. Keep them there: an exe looks one folder up
-for `files\` and the `.env` file, so one moved elsewhere will not find the
+for `files\` and the `config.env` file, so one moved elsewhere will not find the
 templates or the workbook.
 
 Microsoft Word is still required for the Mail Merge versions, for PDF export
@@ -124,9 +124,13 @@ The window icon comes from `logo\documate.ico`. Windows will not accept a PNG
 however it is named, so `packaging\make_icon.py` builds the `.ico` from
 `logo\documate.ico.png` whenever the logo changes.
 
-## The Excel sheet
+## The birth register sheet
 
-The Excel versions read the sheet people type into. DocuMate works the
+This section is about the birth register only. DocuMate recognises its
+sheet by the column headings; any other sheet's columns go to the template
+as they are - see [Making any kind of document](project/docs/CASE_STUDY.md).
+
+The birth register's sheet is the one people type into. DocuMate works the
 certificate fields out from it: names in capitals, `F` as `FEMALE`, the date
 and place of birth joined, and the registration number built from the serial
 and the year the record was registered.
@@ -150,8 +154,8 @@ the officer on an official document, so it comes from the sheet or the run
 stops. Different records can name different officers.
 
 Two optional checks are off by default, because the right value differs
-between registers. Set either in `.env` and a record numbered elsewhere stops
-the run:
+between registers. Set either in `config.env` and a record numbered elsewhere
+stops the run:
 
 ```
 DOCUMATE_FILE_PREFIX=IND/MEL/
@@ -219,13 +223,16 @@ ALTER TABLE applicant ADD CONSTRAINT chk_applicant_status
 ├── sources/         Excel, Azure SQL and PostgreSQL readers
 ├── engines/         docxtpl and Word Mail Merge renderers
 ├── versions/        v3, X, Y, Z and O settings
-├── setup/           paths, configuration, messages, UI
+├── setup/           paths, configuration, file picker, messages, UI
 ├── files/           synthetic data, templates, generated output
 ├── adf/             Azure Data Factory pipeline, dataflow and datasets
+├── packaging/       standalone .exe builds
+├── tools/           database seeding
+├── tests/           pytest suite
 └── project/         documentation, schema and workflow diagram
 ```
 
-To change a version, edit [the version registry](versions/registry.py). To change the workflow shared by every version, edit [the pipeline](flow/pipeline.py). Connection and file-path settings belong in [configuration](setup/config.py), while private values belong in `.env`.
+To change a version, edit [the version registry](versions/registry.py). To change the workflow shared by every version, edit [the pipeline](flow/pipeline.py). Connection and file-path settings belong in [configuration](setup/config.py), while private values belong in `config.env`.
 
 ## Database setup
 
@@ -240,7 +247,7 @@ sqlcmd -S YOUR_SERVER.database.windows.net -d YOUR_DB -U YOUR_USER -P YOUR_PASSW
 psql -h YOUR_HOST -U YOUR_USER -d YOUR_DB -f project/database_schema/DocuMate_Data_Schema.sql
 ```
 
-Copy `.env.example` to `.env` and enter the database connection values. `.env` is ignored by Git; never place passwords or connection credentials in source files.
+Enter the database connection values in `config.env`, the one settings file in the project folder. It is ignored by Git; never place passwords or connection credentials in source files.
 
 ```text
 DOCUMATE_DB_BACKEND=azuresql
@@ -255,11 +262,23 @@ SQL, 5432 for PostgreSQL. Azure SQL also needs Microsoft ODBC Driver 18 installe
 and your client IP allowed under the SQL server's Security -> Networking. Run
 `python main.py --check` to see what was picked up.
 
-Load the sample records with `python -m tools.seed_database --insert`; it writes
-to whichever backend is selected.
+Load records with `python -m tools.seed_database --insert --file YOUR_WORKBOOK.xlsx`;
+it writes to whichever backend is selected. The sample workbook it used by default
+is no longer in the repository, so pass `--file`.
+
+## Any kind of document
+
+DocuMate is not tied to any one document. Every version asks for the Excel
+file and the Word template when it starts - unless they are filled in
+`config.env`, the one settings file - fills each `{{ Column_Name }}` in the
+template from that column, and asks which column identifies a row. Nothing
+to set up per document - see
+[Making any kind of document](project/docs/CASE_STUDY.md). A worked sample
+is in `files/`: `SAMPLE_CASE_STUDY.xlsx` and `SAMPLE_CASE_STUDY.docx`.
 
 ## Further reading
 
+- [Making any kind of document](project/docs/CASE_STUDY.md)
 - [Evolution and benchmarks](project/docs/EVOLUTION.md)
 - [Template setup](project/docs/TEMPLATES.md)
 - [Engineering decisions](project/docs/DESIGN_DECISIONS.md)

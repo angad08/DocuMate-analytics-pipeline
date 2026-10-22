@@ -9,7 +9,7 @@ tool because it's the only thing here that writes new records.
     python -m tools.seed_database --select
     python -m tools.seed_database --insert --file files/data/test_data/Test_Insert_data.xlsx
 
-Connection details come from .env, same as everything else, and so does the
+Connection details come from config.env, same as everything else, and so does the
 database: this tool writes to whichever backend DOCUMATE_DB_BACKEND selects,
 Azure SQL or PostgreSQL. Create the tables first with the matching script in
 project/database_schema.

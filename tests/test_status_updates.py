@@ -16,6 +16,11 @@ from setup import ui
 from sources.excel import ExcelSource
 
 
+@pytest.fixture(autouse=True)
+def birth_register_case(birth_register):
+    """Everything in this file describes the birth register case."""
+
+
 def version(folder):
     return SimpleNamespace(
         label="test", check_records=False, date_columns=[],

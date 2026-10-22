@@ -1,6 +1,6 @@
-# Secrets - never commit the real database password.
-# Several names are listed because config.py accepts any of them, and a
-# name that isn't listed here would get committed.
+# Secrets - config.env holds the database password, so it is never
+# committed. The old names are kept out too, in case one is lying around.
+config.env
 .env
 .env.local
 DocuMate_env
@@ -31,6 +31,9 @@ build/
 # Generated documents are at files/output/.
 files/output/*
 !files/output/.gitkeep
+
+# The files chosen last run - paths on this machine, nobody else's.
+files/last_run.json
 
 # The real birth register. Never commit it under any name - it is the
 # live consular data, not the synthetic demo workbook.

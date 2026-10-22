@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 
+from setup import config
 from setup import messages
 
 
@@ -33,9 +34,12 @@ def build_output_name(folder, prefix, timestamp_format):
     imported - not each time you call it. Z and O check for new records
     every 30 seconds, so every run reused the timestamp from when the
     program started and overwrote the previous document. This fixes that.
+
+    The middle part is config.output_name(): DOCUMATE_OUTPUT_NAME from
+    config.env, or the template's name.
     """
     stamp = datetime.now().strftime(timestamp_format)
-    filename = prefix + "_BIRTH_REGISTRATION_" + stamp + ".docx"
+    filename = prefix + "_" + config.output_name() + "_" + stamp + ".docx"
     return os.path.join(folder, filename)
 
 

@@ -32,7 +32,7 @@ def build_source(version):
         return ExcelSource(config.excel_path(), config.sheet_name())
 
     if version.source == "database":
-        # The database backend comes from DOCUMATE_DB_BACKEND in .env, not
+        # The database backend comes from DOCUMATE_DB_BACKEND in config.env, not
         # from the version. make_database_source() picks it up and imports
         # only that backend's driver.
         return make_database_source()

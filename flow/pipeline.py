@@ -18,6 +18,8 @@ get plugged in when the version starts.
 import os
 import time
 
+import pandas as pd
+
 from setup import messages
 from setup import ui
 from flow import checks
@@ -151,6 +153,41 @@ class Pipeline:
         print(messages.SERIAL_RENUMBERED.format(total=len(data)))
         return data
 
+    def check_template_fields(self, data):
+        """
+        Stop if the template asks for a field the rows cannot fill, and
+        return the columns it prints - the ones that must be filled in.
+
+        Returns None for the birth register, whose own rules decide which
+        columns must be filled. Also None when there is no template to read
+        (a test's stand-in version), so nothing is checked that cannot be.
+        """
+        if data is None or not hasattr(self.version, "template_path"):
+            return None
+
+        from setup import picker
+
+        fields = picker.template_fields(self.version.template_path(),
+                                        self.version.engine)
+        missing = picker.missing_fields(fields, data.columns)
+        if missing:
+            raise CheckFailed(messages.TEMPLATE_FIELDS_MISSING.format(
+                count=len(missing),
+                fields=", ".join(missing),
+                columns=", ".join(str(c) for c in data.columns
+                                  if c not in config.STATE_COLUMNS_OPTIONAL),
+            ))
+
+        if config.is_register():
+            return None
+        return picker.columns_for_fields(fields, data.columns)
+
+    def allow_blanks(self, rows):
+        """Ask whether blank printed fields may stay blank. Never when polling."""
+        if getattr(self, "polling", False):
+            return False
+        return ui.confirm(messages.BLANKS_ASK.format(count=rows))
+
     def check_records(self, data):
         """
         Run the v3 checks, if this version uses them.
@@ -160,13 +197,17 @@ class Pipeline:
         version list if you ever want them on.
         """
         try:
+            required = self.check_template_fields(data)
+
             if self.version.check_records:
                 # The date columns go in so an unreadable date is reported as a
                 # format problem rather than a missing value: 8.11.26 is plainly
                 # not an empty cell, and saying "missing" sends the officer to
                 # look at one.
                 return checks.check_records(data, self.fix_serials,
-                                            self.version.date_columns or ())
+                                            self.version.date_columns or (),
+                                            required=required,
+                                            blanks_ok=self.allow_blanks)
 
             # Even with checks off, an empty result still stops the run.
             if data is None or data.empty:
@@ -185,6 +226,15 @@ class Pipeline:
         if self.version.date_columns:
             data = checks.format_dates(data, self.version.date_columns)
 
+        # Any other column Excel holds as dates would print with a time on
+        # it - "2026-01-05 00:00:00" - so it gets the same format. This is
+        # what lets a case study's dates come out right without listing
+        # anyone having to say which columns are dates.
+        stamped = [name for name in data.columns
+                   if pd.api.types.is_datetime64_any_dtype(data[name])]
+        if stamped:
+            data = checks.format_dates(data, stamped)
+
         return checks.sort_by_serial(data)
 
     def offer_printing(self, data, count, output_path):
@@ -196,7 +246,7 @@ class Pipeline:
         no failure can lose work - the worst case is that the records stay
         as they are and the file is printed by hand later.
         """
-        if not config.OFFER_PRINTING:
+        if not config.offer_printing():
             return
 
         from engines import printing
