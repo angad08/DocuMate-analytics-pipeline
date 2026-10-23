@@ -278,8 +278,12 @@ def date_columns():
     """
     Columns checked and printed as dd/mm/yyyy beyond the ones Excel already
     holds as dates - which are formatted whatever kind of document it is.
+    A case file's DATES are added to these.
     """
-    return list(REGISTER_DATE_COLUMNS) if is_register() else []
+    from setup import cases
+
+    columns = list(REGISTER_DATE_COLUMNS) if is_register() else []
+    return columns + [column for column in cases.dates() if column not in columns]
 
 
 def optional_columns():

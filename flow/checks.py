@@ -11,6 +11,7 @@ which was easy to forget to look for.
 """
 
 import datetime
+import re
 
 import pandas as pd
 
@@ -167,6 +168,138 @@ def field_problems(data, must_have, date_columns=()):
     return problems
 
 
+def case_rule_problems(data):
+    """
+    Every cell that breaks the case file's rules, as (row, column, issue, value).
+
+    The rules are the case file's MUST_FILL, NO_REPEATS, ALLOWED,
+    STARTS_WITH and DATES (see setup/cases.py). With no case file, or one
+    that sets none of them, nothing is checked and the list is empty.
+
+    Raises CheckFailed straight away if a rule names a column the sheet
+    does not have: a check on a missing column would find nothing wrong and
+    let every row through.
+
+    Values are compared as the sheet shows them: spaces trimmed, and
+    ALLOWED ignoring capitals, so "f" is as good as "F".
+    """
+    from setup import cases
+
+    named = cases.named_columns()
+    if not named:
+        return []
+
+    absent = [column for column in named if column not in data.columns]
+    if absent:
+        raise CheckFailed(messages.CASE_COLUMNS_MISSING.format(
+            count=len(absent),
+            columns=", ".join(absent),
+            available=", ".join(str(c) for c in data.columns
+                                if c not in config.STATE_COLUMNS_OPTIONAL),
+        ))
+
+    # Rows are marked done by matching their ID, so the ID has to reach the
+    # write-back exactly as the sheet holds it. Printing it differently
+    # would leave every row pending and make the same documents next run.
+    for id_name in (config.REGISTER_ID_COLUMN if config.is_register() else "",
+                    config.setting("DOCUMATE_ID_COLUMN", ""),
+                    config.setting("DOCUMATE_DB_ID_COLUMN", "")):
+        if id_name and (id_name in cases.capitals() or id_name in cases.replace()):
+            raise CheckFailed(messages.CASE_CHANGES_ID.format(
+                column=id_name, column_name=re.sub(r"\W+", "_", id_name).strip("_")))
+
+    must_fill = cases.must_fill()
+    dates = cases.dates()
+    allowed = cases.allowed()
+    starts_with = cases.starts_with()
+
+    problems = []
+    for index, row in data.iterrows():
+        excel_row = index + 2
+        for column in named:
+            text = cell_text(row[column])
+
+            if not text:
+                if column in must_fill:
+                    problems.append((excel_row, column, messages.ISSUE_MUST_FILL, ""))
+                continue
+
+            if column in dates and not reads_as_date(row[column]):
+                problems.append((excel_row, column, messages.ISSUE_NOT_A_DATE, text))
+
+            choices = allowed.get(column)
+            if choices and text.upper() not in {choice.upper() for choice in choices}:
+                problems.append((excel_row, column, messages.ISSUE_NOT_ALLOWED.format(
+                    values=", ".join(choices)), text))
+
+            prefix = starts_with.get(column)
+            if prefix and not text.startswith(prefix):
+                problems.append((excel_row, column, messages.ISSUE_WRONG_START.format(
+                    prefix=prefix), text))
+
+    # Repeats are found across rows, so after the row-by-row pass. Every
+    # copy is listed, not just the second, because either could be the
+    # mistake.
+    for column in cases.no_repeats():
+        texts = data[column].apply(cell_text)
+        repeated = texts[(texts != "") & texts.duplicated(keep=False)]
+        for index, text in repeated.items():
+            problems.append((index + 2, column, messages.ISSUE_REPEATED, text))
+
+    return problems
+
+
+def apply_case_formatting(data):
+    """
+    How the case file says things should print: REPLACE, then JOIN, then
+    CAPITALS (see setup/cases.py). Returns a new table; the sheet itself
+    is never written to.
+
+    The order is the one that reads naturally in a case file:
+
+      REPLACE first, so F becomes FEMALE before anything is put together.
+      JOIN next, leaving blank parts out - an address with no second line
+          prints "10 ROAD, PERTH", not "10 ROAD, , PERTH". Dates are already
+          dd/mm/yyyy by now, so a joined date reads like any other.
+      CAPITALS last, so it can name a JOIN as well as a column.
+
+    With no case file nothing changes.
+    """
+    from setup import cases
+
+    swaps = cases.replace()
+    joins = cases.joins()
+    upper = cases.capitals()
+    if not (swaps or joins or upper):
+        return data
+
+    data = data.copy()
+
+    for column, pairs in swaps.items():
+        data[column] = [pairs.get(cell_text(value).upper(), value)
+                        for value in data[column]]
+
+    separator = cases.join_separator()
+    for name, parts in joins:
+        data[name] = [separator.join(text for text in (cell_text(row[part]) for part in parts)
+                                     if text)
+                      for _index, row in data.iterrows()]
+
+    for column in upper:
+        # A blank stays blank rather than becoming the text "NAN".
+        data[column] = [cell_text(value).upper() if cell_text(value) else value
+                        for value in data[column]]
+
+    return data
+
+
+def cell_text(value):
+    """A cell as the sheet shows it: trimmed, and 12.0 written as 12."""
+    if isinstance(value, float) and not pd.isna(value) and value.is_integer():
+        return str(int(value))
+    return excel_format.as_text(value)
+
+
 def problem_table(problems):
     """
     The problem list as aligned columns: Row, Field, Issue, Value.
@@ -250,6 +383,16 @@ def check_records(data, serial_fixer=None, date_columns=(), required=None,
             lambda v: not (pd.isna(v) or str(v).strip() == ""))
         if not filled.any():
             raise CheckFailed(messages.NO_SIGNING_AUTHORITY)
+
+    # --- 3d. The case's own rules ---
+    # Only when a case file sets some. Before step 4 on purpose: a MUST_FILL
+    # column is never one to be asked about, so its blanks are reported here
+    # with everything else this case forbids, all in one list.
+    case_problems = case_rule_problems(data)
+    if case_problems:
+        rows_affected = len({row for row, _c, _i, _v in case_problems})
+        raise CheckFailed(messages.CASE_RULES_FAILED.format(count=rows_affected),
+                          problem_table(case_problems))
 
     # --- 4. Are any must-have fields empty? ---
     # The birth register: every column except the optional ones, because

@@ -250,6 +250,87 @@ NO_SIGNING_AUTHORITY = (
 )
 
 # ---------------------------------------------------------------------------
+# Case files (setup/cases.py)
+# ---------------------------------------------------------------------------
+
+CASE_MISSING = (
+    "There is no case called \"{name}\".\n\n"
+    "A case is a settings file in\n\n    {folder}\n\n"
+    "named <case>.env. Cases there: {cases}"
+)
+
+CASE_NEEDS_DOTENV = (
+    "Case files need python-dotenv. Install it with: pip install python-dotenv"
+)
+
+# A misspelt rule would otherwise be ignored, and the check it names would
+# quietly never run - the worst way for a check to fail.
+CASE_UNKNOWN_SETTING = (
+    "{path} has a line DocuMate does not know: {unknown}\n\n"
+    "Check the spelling. A case file can set:\n\n    {known}"
+)
+
+CASE_BAD_RULE = (
+    "{setting} needs a column and its values, like  Sex: F, M\n"
+    "This part has no \":\" in it:  {entry}"
+)
+
+CASE_BAD_REPLACE = (
+    "REPLACE needs pairs of what is typed and what to print, like\n"
+    "    REPLACE=Sex: F=FEMALE, M=MALE\n"
+    "This part has no \"=\" in it:  {entry}"
+)
+
+CASE_BAD_JOIN = (
+    "JOIN needs the columns to put together, joined by +, like\n"
+    "    JOIN=Address: ADD 1 + ADD 2 + ADD 3\n"
+    "\"{name}\" has none."
+)
+
+# The name is used in the template, {{ like_this }}, which cannot hold a
+# space or a dot.
+CASE_BAD_JOIN_NAME = (
+    "JOIN makes a field called \"{name}\", but a template placeholder can only\n"
+    "use letters, digits and _. Call it {suggestion} instead, and use\n"
+    "{{{{ {suggestion} }}}} in the template."
+)
+
+# A rule naming a column the sheet does not have would never find anything
+# wrong, so it stops rather than passing every row.
+CASE_COLUMNS_MISSING = (
+    "The case's rules name {count} column(s) the sheet does not have:\n\n"
+    "    {columns}\n\n"
+    "Columns in the sheet:\n\n"
+    "    {available}\n\n"
+    "Fix the name in the case file or the heading in the sheet.\n"
+    "Nothing has been generated."
+)
+
+CASE_CHANGES_ID = (
+    "The case file changes how \"{column}\" prints (CAPITALS or REPLACE), but\n"
+    "it is the ID column: DocuMate finds each row by it to mark it done.\n\n"
+    "To print it differently, make a copy of it and change that instead:\n\n"
+    "    JOIN={column_name}_Printed: {column}\n"
+    "    CAPITALS={column_name}_Printed\n\n"
+    "and use that name in the template. Nothing has been generated."
+)
+
+CASE_RULES_FAILED = (
+    "{count} row(s) break this case's rules - they are listed in the\n"
+    "console. Fix them in the source file and run again.\n\n"
+    "Nothing has been generated.\n\n" + SIGNATURE
+)
+
+CASE_LOADED = "DocuMate : Case {name} ({path})."
+
+# The Issue column of the problem table, one wording per rule.
+ISSUE_MUST_FILL = "Missing"
+ISSUE_NOT_ALLOWED = "Not allowed - use {values}"
+ISSUE_WRONG_START = "Should start with {prefix}"
+ISSUE_REPEATED = "Repeated"
+ISSUE_NOT_A_DATE = "Date unreadable"
+
+# ---------------------------------------------------------------------------
 # Printing
 # ---------------------------------------------------------------------------
 

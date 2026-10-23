@@ -167,9 +167,13 @@ class Pipeline:
 
         from setup import picker
 
+        from setup import cases
+
         fields = picker.template_fields(self.version.template_path(),
                                         self.version.engine)
-        missing = picker.missing_fields(fields, data.columns)
+        # A case file's JOINs are made later, in transform_records, but they
+        # are fields the template can use all the same.
+        missing = picker.missing_fields(fields, list(data.columns) + cases.join_names())
         if missing:
             raise CheckFailed(messages.TEMPLATE_FIELDS_MISSING.format(
                 count=len(missing),
@@ -213,6 +217,14 @@ class Pipeline:
             if data is None or data.empty:
                 raise CheckFailed(messages.NO_DATA)
 
+            # A case file's rules apply whatever the source: they are the
+            # rules of the document, and the SQL knows nothing about them.
+            problems = checks.case_rule_problems(data)
+            if problems:
+                rows_affected = len({row for row, _c, _i, _v in problems})
+                raise CheckFailed(messages.CASE_RULES_FAILED.format(count=rows_affected),
+                                  checks.problem_table(problems))
+
             return data
 
         except CheckFailed as failure:
@@ -234,6 +246,10 @@ class Pipeline:
                    if pd.api.types.is_datetime64_any_dtype(data[name])]
         if stamped:
             data = checks.format_dates(data, stamped)
+
+        # The case file's REPLACE, JOIN and CAPITALS - after the dates, so a
+        # date joined into a field reads dd/mm/yyyy like everywhere else.
+        data = checks.apply_case_formatting(data)
 
         return checks.sort_by_serial(data)
 

@@ -19,6 +19,11 @@ Any Excel file and Word template work: every version asks for both when it
 starts, unless they are filled in config.env, and fills each
 {{ placeholder }} in the template from the column with that heading.
 
+A case file gives one kind of document its own files and checks:
+
+    python main.py v3 foreign_pcc   use cases/foreign_pcc.env
+    python main.py foreign_pcc      the same, with v3
+
 """
 
 import argparse
@@ -57,6 +62,13 @@ def build_parser():
         default="v3",
         type=str.lower,
         help="which version to run (default: v3)",
+    )
+
+    parser.add_argument(
+        "case",
+        nargs="?",
+        default=None,
+        help="a case file in cases/, without .env (optional)",
     )
 
     parser.add_argument(
@@ -108,6 +120,18 @@ def list_versions():
         print("%-5s %-12s %-11s %-8s %-5s %s" % (
             version.key, version.source, version.engine, batch, pdf, version.notes
         ))
+
+
+def list_cases():
+    """Print the case files in cases/, or how to make the first one."""
+    from setup import cases
+
+    names = cases.available()
+    print("\nCASES  (cases\\<name>.env - run with: python main.py v3 <name>)")
+    if not names:
+        print("  none yet")
+    for name in names:
+        print("  " + name)
 
 
 def check_odbc_driver():
@@ -253,13 +277,26 @@ def main(argv=None):
 
     if args.list:
         list_versions()
+        list_cases()
         return 0
+
+    # "python main.py foreign_pcc" names a case, not a version: run it with v3.
+    if args.case is None and args.version not in versions.VERSIONS:
+        from setup import cases
+        if args.version in cases.available():
+            args.case, args.version = args.version, "v3"
 
     version = versions.get(args.version)
 
-    # Which workbook and template: from config.env, or asked. Then
-    # building opens them, so a file that is not there stops it here.
+    # Which workbook and template: from the case file, config.env, or
+    # asked. Then building opens them, so a file that is not there stops
+    # it here.
     try:
+        if args.case:
+            from setup import cases
+            from setup import messages
+            path = cases.load(args.case)
+            print(messages.CASE_LOADED.format(name=args.case, path=path))
         picker.prepare_run(version)
         pipeline = versions.build(args.version)
     except (ValueError, OSError) as error:
